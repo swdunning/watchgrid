@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+  // Prisma 7: client is NOT generated in node_modules by default
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma 7: do NOT put url here
+}
+
+enum ProviderKey {
+  NETFLIX
+  HULU
+  PRIME
+  MAX
+  DISNEY
+  APPLETV
+  PARAMOUNT
+  PEACOCK
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  providers    UserProvider[]
+  items        SavedItem[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model UserProvider {
+  id       String      @id @default(cuid())
+  userId   String
+  provider ProviderKey
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+model SavedItem {
+  id               String      @id @default(cuid())
+  userId           String
+  provider         ProviderKey
+  watchmodeTitleId Int
+  title            String
+  type             String
+  poster           String?
+  watchUrl         String?
+  createdAt        DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, watchmodeTitleId])
+}

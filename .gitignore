@@ -1,0 +1,21 @@
+# dependencies
+**/node_modules/
+
+# env
+.env
+**/.env
+**/.env.*
+
+# build outputs
+**/dist/
+**/build/
+**/.vite/
+
+# Prisma generated / caches
+**/.prisma/
+**/.turbo/
+**/.cache/
+
+# OS/editor
+.DS_Store
+.vscode/

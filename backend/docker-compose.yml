@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: watchgrid_db
+    environment:
+      POSTGRES_USER: watchgrid
+      POSTGRES_PASSWORD: watchgrid
+      POSTGRES_DB: watchgrid
+    ports:
+      - "5432:5432"
+    volumes:
+      - watchgrid_pg:/var/lib/postgresql/data
+
+volumes:
+  watchgrid_pg:

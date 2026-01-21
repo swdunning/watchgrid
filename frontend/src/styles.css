@@ -1,0 +1,180 @@
+:root {
+	--bg: #06050a;
+	--panel: rgba(255, 255, 255, 0.06);
+	--border: rgba(255, 255, 255, 0.10);
+	--text: rgba(255, 255, 255, 0.92);
+	--muted: rgba(255, 255, 255, 0.62);
+
+	--purple: #6d28d9;
+	--purple2: #4c1d95;
+	--glow: rgba(109, 40, 217, 0.30);
+}
+
+* {
+	box-sizing: border-box
+}
+
+html,
+body {
+	height: 100%
+}
+
+body {
+	margin: 0;
+	font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+	background:
+		radial-gradient(900px 520px at 18% -10%, rgba(109, 40, 217, 0.35), transparent 60%),
+		radial-gradient(800px 520px at 85% 0%, rgba(76, 29, 149, 0.25), transparent 60%),
+		var(--bg);
+	color: var(--text);
+}
+
+a {
+	color: inherit;
+	text-decoration: none
+}
+
+a:hover {
+	text-decoration: underline
+}
+
+.page {
+	width: min(1200px, calc(100% - 32px));
+	margin: 0 auto;
+	padding: 28px 0 70px;
+}
+
+.card {
+	border: 1px solid var(--border);
+	background: rgba(255, 255, 255, 0.04);
+	border-radius: 18px;
+	padding: 16px;
+}
+
+.muted {
+	color: var(--muted)
+}
+
+.header {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	backdrop-filter: blur(14px);
+	background: rgba(6, 5, 10, 0.55);
+	border-bottom: 1px solid var(--border);
+}
+
+.headerInner {
+	width: min(1200px, calc(100% - 32px));
+	margin: 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 0;
+}
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-weight: 900
+}
+
+.mark {
+	width: 14px;
+	height: 14px;
+	border-radius: 4px;
+	background: linear-gradient(135deg, var(--purple), #a78bfa);
+	box-shadow: 0 0 22px var(--glow);
+}
+
+.btn {
+	border: 1px solid rgba(167, 139, 250, 0.25);
+	background: linear-gradient(135deg, var(--purple), var(--purple2));
+	color: white;
+	font-weight: 800;
+	border-radius: 12px;
+	padding: 10px 12px;
+	cursor: pointer;
+	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), 0 0 26px rgba(109, 40, 217, 0.12);
+}
+
+.btn.secondary {
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid var(--border);
+	color: var(--text);
+	box-shadow: none;
+}
+
+.btn:disabled {
+	opacity: .7;
+	cursor: not-allowed
+}
+
+.input {
+	width: 100%;
+	padding: 12px 14px;
+	border-radius: 12px;
+	border: 1px solid var(--border);
+	background: rgba(0, 0, 0, 0.35);
+	color: var(--text);
+	outline: none;
+}
+
+.input:focus {
+	border-color: rgba(167, 139, 250, 0.45);
+	box-shadow: 0 0 0 4px rgba(109, 40, 217, 0.18);
+}
+
+.rowTitle {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin: 18px 0 10px
+}
+
+.rail {
+	display: flex;
+	gap: 12px;
+	overflow: auto;
+	padding-bottom: 8px;
+}
+
+.posterCard {
+	min-width: 160px;
+	width: 160px;
+	border-radius: 16px;
+	overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	background: rgba(255, 255, 255, 0.04);
+	transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.posterCard:hover {
+	transform: translateY(-3px);
+	border-color: rgba(167, 139, 250, 0.35);
+	box-shadow: 0 16px 42px rgba(0, 0, 0, 0.45), 0 0 30px rgba(109, 40, 217, 0.16);
+}
+
+.posterImg {
+	width: 100%;
+	aspect-ratio: 2/3;
+	object-fit: cover;
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.posterBody {
+	padding: 10px
+}
+
+.posterTitle {
+	margin: 0;
+	font-weight: 900;
+	font-size: 13px
+}
+
+.badge {
+	margin-top: 6px;
+	font-size: 12px;
+	color: var(--muted)
+}

@@ -1,0 +1,54 @@
+generator client {
+    provider   = "prisma-client-js"
+    engineType = "library"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+model User {
+    id           String         @id @default(cuid())
+    email        String         @unique
+    passwordHash String
+    providers    UserProvider[]
+    savedItems   SavedItem[]
+    createdAt    DateTime       @default(now())
+    updatedAt    DateTime       @updatedAt
+}
+
+model UserProvider {
+    id       String @id @default(cuid())
+    userId   String
+    provider String
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([userId, provider])
+}
+
+model SavedItem {
+    id               String   @id @default(cuid())
+    userId           String
+    provider         String
+    watchmodeTitleId Int
+    title            String
+    type             String
+    poster           String?
+    watchUrl         String?
+    createdAt        DateTime @default(now())
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([userId, provider, watchmodeTitleId])
+}
+
+model CacheEntry {
+    key       String   @id
+    valueJson String
+    expiresAt DateTime
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([expiresAt])
+}
