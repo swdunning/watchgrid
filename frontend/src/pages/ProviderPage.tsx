@@ -13,13 +13,18 @@ type Item = {
   provider?: string;
 };
 
+type Genre = { id: number; name: string };
+
 export default function ProviderPage() {
   const nav = useNavigate();
   const { provider } = useParams();
-
   const providerKey = useMemo(() => String(provider || "").toUpperCase(), [provider]);
 
   const [label, setLabel] = useState(providerKey);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [genreId, setGenreId] = useState<number | "all">("all");
 
   const [saved, setSaved] = useState<Item[]>([]);
   const [browseTab, setBrowseTab] = useState<"popular" | "new">("popular");
@@ -31,6 +36,25 @@ export default function ProviderPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loadingBrowse, setLoadingBrowse] = useState(false);
   const [loadingSearch, setLoadingSearch] = useState(false);
+
+  const loadMeta = async () => {
+    const data = await api<{ providers: { provider: string; label: string; logoUrl: string | null }[] }>(
+      "/api/meta/providers"
+    );
+    const m = (data.providers || []).find((p) => p.provider === providerKey);
+    if (m) {
+      setLabel(m.label);
+      setLogoUrl(m.logoUrl);
+    } else {
+      setLabel(providerKey);
+      setLogoUrl(null);
+    }
+  };
+
+  const loadGenres = async () => {
+    const data = await api<{ genres: Genre[] }>("/api/genres");
+    setGenres(data.genres || []);
+  };
 
   const loadProviderSaved = async () => {
     const data = await api<{ provider: string; items: any[] }>(`/api/provider/${providerKey}`);
@@ -44,15 +68,15 @@ export default function ProviderPage() {
         provider: providerKey
       }))
     );
-    setLabel(providerKey);
   };
 
-  const loadBrowse = async (tab: "popular" | "new") => {
+  const loadBrowse = async (tab: "popular" | "new", g: number | "all") => {
     setLoadingBrowse(true);
     setErr(null);
     try {
+      const genreParam = g === "all" ? "" : `&genreId=${encodeURIComponent(String(g))}`;
       const data = await api<{ items: any[] }>(
-        `/api/provider/${providerKey}/browse?tab=${encodeURIComponent(tab)}`
+        `/api/provider/${providerKey}/browse?tab=${encodeURIComponent(tab)}${genreParam}`
       );
       setBrowseItems(
         (data.items || []).map((x: any) => ({
@@ -74,13 +98,14 @@ export default function ProviderPage() {
   useEffect(() => {
     (async () => {
       try {
-        await loadProviderSaved();
+        await Promise.all([loadMeta(), loadGenres(), loadProviderSaved()]);
       } catch (e: any) {
-        setErr(e?.message ?? "Failed to load provider");
+        setErr(e?.message ?? "Failed to load provider page");
       }
-      // Always load Popular first so it's never blank
-      await loadBrowse("popular");
+      // Always load Popular first
       setBrowseTab("popular");
+      setGenreId("all");
+      await loadBrowse("popular", "all");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerKey]);
@@ -151,10 +176,38 @@ export default function ProviderPage() {
 
       <div className="page">
         <div className="card">
-          <h1 style={{ marginTop: 0 }}>{label}</h1>
-          <p className="muted">
-            Browse Popular/New, search within {label}, and add titles to this provider list.
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt=""
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  objectFit: "contain",
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  padding: 6
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.10)"
+                }}
+              />
+            )}
+
+            <div>
+              <h1 style={{ margin: 0 }}>{label}</h1>
+              <div className="muted">Browse by Popular/New + Genre, or search within {label}.</div>
+            </div>
+          </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
             <input
@@ -170,37 +223,59 @@ export default function ProviderPage() {
             </button>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+          {/* Tabs + Genre */}
+          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
             <button
               className={`btn ${browseTab === "popular" ? "" : "secondary"}`}
               onClick={async () => {
                 setBrowseTab("popular");
-                await loadBrowse("popular");
+                await loadBrowse("popular", genreId);
               }}
-              disabled={loadingBrowse && browseTab === "popular"}
             >
               Popular
             </button>
+
             <button
               className={`btn ${browseTab === "new" ? "" : "secondary"}`}
               onClick={async () => {
                 setBrowseTab("new");
-                await loadBrowse("new");
+                await loadBrowse("new", genreId);
               }}
-              disabled={loadingBrowse && browseTab === "new"}
             >
               New
             </button>
+
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginLeft: 8 }}>
+              <div className="muted">Genre</div>
+              <select
+                className="input"
+                style={{ width: 260 }}
+                value={genreId}
+                onChange={async (e) => {
+                  const v = e.target.value === "all" ? "all" : Number(e.target.value);
+                  setGenreId(v as any);
+                  await loadBrowse(browseTab, v as any);
+                }}
+              >
+                <option value="all">All genres</option>
+                {genres.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
         </div>
 
-        {/* Browse rail (never blank) */}
+        {/* Browse rail */}
         <div style={{ marginTop: 18 }}>
           <div className="rowTitle">
             <h2 style={{ margin: 0 }}>
               {browseTab === "popular" ? `Popular on ${label}` : `New on ${label}`}
+              {genreId !== "all" ? ` • ${genres.find((g) => g.id === genreId)?.name ?? ""}` : ""}
             </h2>
             <div className="muted">{loadingBrowse ? "Loading…" : "Browse"}</div>
           </div>
@@ -211,14 +286,7 @@ export default function ProviderPage() {
               return (
                 <TitleCard
                   key={b.watchmodeTitleId}
-                  item={{
-                    watchmodeTitleId: b.watchmodeTitleId,
-                    title: b.title,
-                    type: b.type,
-                    poster: b.poster,
-                    watchUrl: b.watchUrl,
-                    provider: providerKey
-                  }}
+                  item={{ ...b, provider: providerKey }}
                   action={
                     isSaved ? (
                       <button
@@ -255,14 +323,7 @@ export default function ProviderPage() {
             {saved.map((s) => (
               <TitleCard
                 key={s.watchmodeTitleId}
-                item={{
-                  watchmodeTitleId: s.watchmodeTitleId,
-                  title: s.title,
-                  type: s.type,
-                  poster: s.poster,
-                  watchUrl: s.watchUrl,
-                  provider: providerKey
-                }}
+                item={{ ...s, provider: providerKey }}
                 action={
                   <button
                     className="btn secondary"
@@ -291,14 +352,7 @@ export default function ProviderPage() {
                 return (
                   <TitleCard
                     key={r.watchmodeTitleId}
-                    item={{
-                      watchmodeTitleId: r.watchmodeTitleId,
-                      title: r.title,
-                      type: r.type,
-                      poster: r.poster,
-                      watchUrl: r.watchUrl,
-                      provider: providerKey
-                    }}
+                    item={{ ...r, provider: providerKey }}
                     action={
                       isSaved ? (
                         <button
