@@ -12,6 +12,9 @@ const router = Router()
  * Returns browse-ready posters (not blank screen).
  */
 router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
+	const genreIdRaw = req.query.genreId ? Number(req.query.genreId) : null
+	const genreIds = genreIdRaw && Number.isFinite(genreIdRaw) ? [genreIdRaw] : undefined
+
 	const userId = (req as any).userId as string
 	const provider = normalizeProviderKey(String(req.params.provider || ""))
 	if (!provider) return res.status(400).json({ error: "Invalid provider" })
@@ -42,11 +45,13 @@ router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 					limit: 24,
 					releaseDateStart: fmt(yearAgo),
 					releaseDateEnd: fmt(now),
+					genreIds,
 				})
 			: await watchmodeListTitles({
 					provider,
 					sortBy: "popularity_desc",
 					limit: 24,
+					genreIds,
 				})
 
 	// Merge poster + best watchUrl for THIS provider
