@@ -37,7 +37,7 @@ router.get("/search", requireAuth, async (req, res) => {
 			let matchedSource: any = null
 
 			for (const p of activeProviders) {
-				const found = (sources ?? []).find((s: any) => sourceMatchesProvider(p, String(s.name)))
+				const found = (sources ?? []).find((s: any) => sourceMatchesProvider({ name: s?.name }, p))
 				if (found) {
 					matchedProvider = p
 					matchedSource = found

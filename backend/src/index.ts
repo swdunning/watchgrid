@@ -1,10 +1,11 @@
+import "dotenv/config"
+
 import express from "express"
 import cors from "cors"
-import dotenv from "dotenv"
 import cookieParser from "cookie-parser"
+
 import genresRoutes from "./routes/genres"
 import metaRoutes from "./routes/meta"
-
 import authRoutes from "./auth/authRoutes"
 import homeRoutes from "./routes/home"
 import providerRoutes from "./routes/providers"
@@ -12,20 +13,14 @@ import searchRoutes from "./routes/search"
 import listsRoutes from "./routes/lists"
 import browseRoutes from "./routes/browse"
 
-dotenv.config()
-
 const app = express()
 
-// With Vite proxy you can keep this permissive in dev.
-// Cookies require credentials=true.
 app.use(cors({ origin: true, credentials: true }))
-
 app.use(express.json())
 app.use(cookieParser())
 
 app.get("/health", (_req, res) => res.json({ ok: true }))
 
-//register genre routes
 app.use("/api", genresRoutes)
 app.use("/api", metaRoutes)
 

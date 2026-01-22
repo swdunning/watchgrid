@@ -13,11 +13,11 @@ export const PROVIDERS: ProviderDef[] = [
 	{ key: "NETFLIX", label: "Netflix", watchmodeNames: ["netflix"] },
 	{ key: "HULU", label: "Hulu", watchmodeNames: ["hulu"] },
 	{ key: "PRIME_VIDEO", label: "Prime Video", watchmodeNames: ["amazon prime", "prime video", "amazon"] },
-	{ key: "DISNEY_PLUS", label: "Disney+", watchmodeNames: ["disney+"] },
 	// Watchmode source name is often "HBO Max" or "Max"
 	{ key: "HBO_MAX", label: "Max", watchmodeNames: ["hbo max", "max", "hbo"] },
-	{ key: "APPLE_TV", label: "Apple TV+", watchmodeNames: ["apple tv", "apple tv+"] },
-	{ key: "PARAMOUNT_PLUS", label: "Paramount+", watchmodeNames: ["paramount+"] },
+	{ key: "APPLE_TV", label: "Apple TV+", watchmodeNames: ["apple tv", "apple tv+", "apple tv plus", "appletv"] },
+	{ key: "DISNEY_PLUS", label: "Disney+", watchmodeNames: ["disney+", "disney plus"] },
+	{ key: "PARAMOUNT_PLUS", label: "Paramount+", watchmodeNames: ["paramount+", "paramount plus"] },
 	{ key: "PEACOCK", label: "Peacock", watchmodeNames: ["peacock"] },
 ]
 
@@ -90,3 +90,48 @@ export function isProviderKey(value: unknown): value is ProviderKey {
 }
 
 export const ALL_PROVIDERS: ProviderKey[] = PROVIDERS.map((p) => p.key)
+
+// Watchmode /sources match helper.
+// Some Watchmode source names vary (e.g., "Max", "HBO Max", "Apple TV+").
+// This function is used by /api/search to map a Watchmode source to our ProviderKey.
+
+export type WatchmodeSourceLike = {
+	name?: string | null
+}
+
+export function sourceMatchesProvider(source: WatchmodeSourceLike, provider: ProviderKey): boolean {
+	const name = String(source?.name ?? "").toLowerCase()
+	if (!name) return false
+
+	switch (provider) {
+		case "NETFLIX":
+			return name.includes("netflix")
+
+		case "HULU":
+			return name.includes("hulu")
+
+		case "PRIME_VIDEO":
+			// Watchmode often uses "Amazon Prime Video" or "Prime Video"
+			return name.includes("prime") || name.includes("amazon")
+
+		case "DISNEY_PLUS":
+			return name.includes("disney")
+
+		case "HBO_MAX":
+			// Can be "HBO Max" or "Max"
+			return name.includes("hbo") || name === "max" || name.includes(" max")
+
+		case "APPLE_TV":
+			// Often "Apple TV+" / "Apple TV Plus"
+			return name.includes("apple tv")
+
+		case "PARAMOUNT_PLUS":
+			return name.includes("paramount")
+
+		case "PEACOCK":
+			return name.includes("peacock")
+
+		default:
+			return false
+	}
+}
