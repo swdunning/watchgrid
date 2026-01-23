@@ -1,9 +1,9 @@
+import { normalizeProviderKey, sourceMatchesProvider, type ProviderKey } from "../types"
 import { Router } from "express"
 import { prisma } from "../prisma"
 import { requireAuth } from "../auth/authMiddleware"
 import { watchmodeGetSources, watchmodeSearchTitles } from "../services/watchmodeService"
 import { tmdbPosterUrl } from "../services/tmdbService"
-import { normalizeProviderKey, sourceMatchesProvider, type ProviderKey } from "../types"
 
 const router = Router()
 

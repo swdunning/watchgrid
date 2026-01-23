@@ -1,137 +1,47 @@
-// backend/src/types/index.ts
+export type ProviderKey = "NETFLIX" | "HULU" | "PRIME" | "MAX" | "DISNEY" | "APPLETV" | "PARAMOUNT" | "PEACOCK"
 
-export type ProviderKey = "NETFLIX" | "HULU" | "PRIME_VIDEO" | "DISNEY_PLUS" | "HBO_MAX" | "APPLE_TV" | "PARAMOUNT_PLUS" | "PEACOCK"
+export const PROVIDERS: { key: ProviderKey; label: string; watchmodeNames: string[] }[] = [
+	{ key: "NETFLIX", label: "Netflix", watchmodeNames: ["Netflix"] },
+	{ key: "HULU", label: "Hulu", watchmodeNames: ["Hulu"] },
 
-export type ProviderDef = {
-	key: ProviderKey
-	label: string
-	// strings used to match Watchmode /sources names
-	watchmodeNames: string[]
-}
+	// Prime naming varies in Watchmode sources & title sources
+	{ key: "PRIME", label: "Prime Video", watchmodeNames: ["Amazon Prime Video", "Prime Video", "Amazon Video"] },
 
-export const PROVIDERS: ProviderDef[] = [
-	{ key: "NETFLIX", label: "Netflix", watchmodeNames: ["netflix"] },
-	{ key: "HULU", label: "Hulu", watchmodeNames: ["hulu"] },
-	{ key: "PRIME_VIDEO", label: "Prime Video", watchmodeNames: ["amazon prime", "prime video", "amazon"] },
-	// Watchmode source name is often "HBO Max" or "Max"
-	{ key: "HBO_MAX", label: "Max", watchmodeNames: ["hbo max", "max", "hbo"] },
-	{ key: "APPLE_TV", label: "Apple TV+", watchmodeNames: ["apple tv", "apple tv+", "apple tv plus", "appletv"] },
-	{ key: "DISNEY_PLUS", label: "Disney+", watchmodeNames: ["disney+", "disney plus"] },
-	{ key: "PARAMOUNT_PLUS", label: "Paramount+", watchmodeNames: ["paramount+", "paramount plus"] },
-	{ key: "PEACOCK", label: "Peacock", watchmodeNames: ["peacock"] },
+	// Max naming varies
+	{ key: "MAX", label: "Max", watchmodeNames: ["Max", "HBO Max"] },
+
+	// Disney naming varies
+	{ key: "DISNEY", label: "Disney+", watchmodeNames: ["Disney+", "Disney Plus"] },
+
+	// Apple TV+ naming varies a LOT
+	{ key: "APPLETV", label: "Apple TV+", watchmodeNames: ["Apple TV+", "Apple TV Plus", "Apple TV"] },
+
+	// Paramount naming varies
+	{ key: "PARAMOUNT", label: "Paramount+", watchmodeNames: ["Paramount+", "Paramount Plus"] },
+
+	{ key: "PEACOCK", label: "Peacock", watchmodeNames: ["Peacock"] },
 ]
 
-const LABELS: Record<ProviderKey, string> = Object.fromEntries(PROVIDERS.map((p) => [p.key, p.label])) as Record<ProviderKey, string>
-
-export function labelFor(key: ProviderKey): string {
-	return LABELS[key] ?? key
+export function normalizeProviderKey(raw: string): ProviderKey | null {
+	const v = String(raw || "")
+		.trim()
+		.toUpperCase()
+	const keys = PROVIDERS.map((p) => p.key)
+	return keys.includes(v as ProviderKey) ? (v as ProviderKey) : null
 }
 
-const NORMALIZE: Record<string, ProviderKey> = {
-	NETFLIX: "NETFLIX",
-	netflix: "NETFLIX",
-	Hulu: "HULU",
-	hulu: "HULU",
-	HULU: "HULU",
-
-	PRIME_VIDEO: "PRIME_VIDEO",
-	"prime video": "PRIME_VIDEO",
-	primevideo: "PRIME_VIDEO",
-	amazon: "PRIME_VIDEO",
-	"amazon prime": "PRIME_VIDEO",
-	"amazon prime video": "PRIME_VIDEO",
-
-	DISNEY_PLUS: "DISNEY_PLUS",
-	"disney+": "DISNEY_PLUS",
-	disneyplus: "DISNEY_PLUS",
-	"disney plus": "DISNEY_PLUS",
-
-	HBO_MAX: "HBO_MAX",
-	"hbo max": "HBO_MAX",
-	hbomax: "HBO_MAX",
-	max: "HBO_MAX",
-
-	APPLE_TV: "APPLE_TV",
-	"apple tv": "APPLE_TV",
-	"apple tv+": "APPLE_TV",
-	appletv: "APPLE_TV",
-
-	PARAMOUNT_PLUS: "PARAMOUNT_PLUS",
-	"paramount+": "PARAMOUNT_PLUS",
-	paramountplus: "PARAMOUNT_PLUS",
-	"paramount plus": "PARAMOUNT_PLUS",
-
-	PEACOCK: "PEACOCK",
-	peacock: "PEACOCK",
+export function labelFor(provider: ProviderKey): string {
+	return PROVIDERS.find((p) => p.key === provider)?.label ?? provider
 }
 
-export function normalizeProviderKey(input: unknown): ProviderKey | null {
-	if (!input) return null
-	const raw = String(input).trim()
-	if (!raw) return null
+/**
+ * This is the function your search.ts is calling.
+ * It MUST exist + be exported.
+ */
+export function sourceMatchesProvider(provider: ProviderKey, sourceName: string): boolean {
+	const p = PROVIDERS.find((x) => x.key === provider)
+	if (!p) return false
 
-	const direct = NORMALIZE[raw]
-	if (direct) return direct
-
-	const lowered = raw.toLowerCase()
-	if (NORMALIZE[lowered]) return NORMALIZE[lowered]
-
-	const snake = lowered.replace(/\s+/g, "_")
-	if (NORMALIZE[snake]) return NORMALIZE[snake]
-
-	const nospace = lowered.replace(/\s+/g, "")
-	if (NORMALIZE[nospace]) return NORMALIZE[nospace]
-
-	return null
-}
-
-export function isProviderKey(value: unknown): value is ProviderKey {
-	return normalizeProviderKey(value) !== null
-}
-
-export const ALL_PROVIDERS: ProviderKey[] = PROVIDERS.map((p) => p.key)
-
-// Watchmode /sources match helper.
-// Some Watchmode source names vary (e.g., "Max", "HBO Max", "Apple TV+").
-// This function is used by /api/search to map a Watchmode source to our ProviderKey.
-
-export type WatchmodeSourceLike = {
-	name?: string | null
-}
-
-export function sourceMatchesProvider(source: WatchmodeSourceLike, provider: ProviderKey): boolean {
-	const name = String(source?.name ?? "").toLowerCase()
-	if (!name) return false
-
-	switch (provider) {
-		case "NETFLIX":
-			return name.includes("netflix")
-
-		case "HULU":
-			return name.includes("hulu")
-
-		case "PRIME_VIDEO":
-			// Watchmode often uses "Amazon Prime Video" or "Prime Video"
-			return name.includes("prime") || name.includes("amazon")
-
-		case "DISNEY_PLUS":
-			return name.includes("disney")
-
-		case "HBO_MAX":
-			// Can be "HBO Max" or "Max"
-			return name.includes("hbo") || name === "max" || name.includes(" max")
-
-		case "APPLE_TV":
-			// Often "Apple TV+" / "Apple TV Plus"
-			return name.includes("apple tv")
-
-		case "PARAMOUNT_PLUS":
-			return name.includes("paramount")
-
-		case "PEACOCK":
-			return name.includes("peacock")
-
-		default:
-			return false
-	}
+	const name = String(sourceName || "").toLowerCase()
+	return p.watchmodeNames.some((n) => name.includes(n.toLowerCase()))
 }
