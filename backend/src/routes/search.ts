@@ -38,6 +38,7 @@ router.get("/search", requireAuth, async (req, res) => {
 	const providerSourceIds = providerSourceIdPairs.filter((x) => typeof x.sourceId === "number" && x.sourceId).map((x) => x.sourceId as number)
 
 	if (providerSourceIds.length === 0) {
+		console.warn("[search] No sourceIds resolved for providers:", activeProviders)
 		return res.json([]) // can't resolve any provider source ids
 	}
 

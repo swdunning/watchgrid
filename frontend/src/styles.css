@@ -178,3 +178,54 @@ a:hover {
 	font-size: 12px;
 	color: var(--muted)
 }
+
+/* --- Netflix-style animated search panel --- */
+.searchPanel {
+	margin-top: 14px;
+	overflow: hidden;
+
+	/* collapsed by default */
+	max-height: 0;
+	opacity: 0;
+	transform: translateY(-6px);
+
+	transition:
+		max-height 260ms ease,
+		opacity 200ms ease,
+		transform 260ms ease;
+}
+
+.searchPanel.open {
+	/* big enough for a title + horizontal rail */
+	max-height: 560px;
+	opacity: 1;
+	transform: translateY(0);
+}
+
+.searchPanelHeader {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin: 10px 0 10px;
+}
+
+.searchPanelTitle {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+}
+
+.searchCloseBtn {
+	border: 1px solid var(--border);
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--text);
+	font-weight: 900;
+	border-radius: 12px;
+	padding: 8px 10px;
+	cursor: pointer;
+}
+
+.searchCloseBtn:hover {
+	border-color: rgba(167, 139, 250, 0.35);
+}

@@ -15,9 +15,16 @@ type Item = {
 
 type Genre = { id: number; name: string };
 
+type ProviderMeta = {
+  provider: string;
+  label: string;
+  logoUrl: string | null;
+};
+
 export default function ProviderPage() {
   const nav = useNavigate();
   const { provider } = useParams();
+
   const providerKey = useMemo(() => String(provider || "").toUpperCase(), [provider]);
 
   const [label, setLabel] = useState(providerKey);
@@ -30,17 +37,17 @@ export default function ProviderPage() {
   const [browseTab, setBrowseTab] = useState<"popular" | "new">("popular");
   const [browseItems, setBrowseItems] = useState<Item[]>([]);
 
+  // Search state (animated panel)
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Item[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const [err, setErr] = useState<string | null>(null);
   const [loadingBrowse, setLoadingBrowse] = useState(false);
   const [loadingSearch, setLoadingSearch] = useState(false);
 
   const loadMeta = async () => {
-    const data = await api<{ providers: { provider: string; label: string; logoUrl: string | null }[] }>(
-      "/api/meta/providers"
-    );
+    const data = await api<{ providers: ProviderMeta[] }>("/api/meta/providers");
     const m = (data.providers || []).find((p) => p.provider === providerKey);
     if (m) {
       setLabel(m.label);
@@ -95,6 +102,7 @@ export default function ProviderPage() {
     }
   };
 
+  // Load page data
   useEffect(() => {
     (async () => {
       try {
@@ -102,7 +110,8 @@ export default function ProviderPage() {
       } catch (e: any) {
         setErr(e?.message ?? "Failed to load provider page");
       }
-      // Always load Popular first
+
+      // Always load Popular first so page isn't blank
       setBrowseTab("popular");
       setGenreId("all");
       await loadBrowse("popular", "all");
@@ -110,9 +119,27 @@ export default function ProviderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerKey]);
 
+  // Option A: if query cleared, clear results immediately
+  useEffect(() => {
+    if (q.trim() === "") setResults([]);
+  }, [q]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQ("");
+    setResults([]);
+    setErr(null);
+  };
+
   const runProviderSearch = async () => {
     const term = q.trim();
-    if (!term) return;
+
+    // Option B: Enter on empty collapses + clears
+    if (!term) {
+      setResults([]);
+      setSearchOpen(false);
+      return;
+    }
 
     setLoadingSearch(true);
     setErr(null);
@@ -205,7 +232,7 @@ export default function ProviderPage() {
 
             <div>
               <h1 style={{ margin: 0 }}>{label}</h1>
-              <div className="muted">Browse by Popular/New + Genre, or search within {label}.</div>
+              <div className="muted">Browse Popular/New + Genre, or search within {label}.</div>
             </div>
           </div>
 
@@ -215,6 +242,7 @@ export default function ProviderPage() {
               style={{ maxWidth: 560 }}
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onFocus={() => setSearchOpen(true)}
               placeholder={`Search ${label}…`}
               onKeyDown={(e) => (e.key === "Enter" ? runProviderSearch() : null)}
             />
@@ -224,13 +252,22 @@ export default function ProviderPage() {
           </div>
 
           {/* Tabs + Genre */}
-          <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 12,
+              flexWrap: "wrap",
+              alignItems: "center"
+            }}
+          >
             <button
               className={`btn ${browseTab === "popular" ? "" : "secondary"}`}
               onClick={async () => {
                 setBrowseTab("popular");
                 await loadBrowse("popular", genreId);
               }}
+              disabled={loadingBrowse && browseTab === "popular"}
             >
               Popular
             </button>
@@ -241,6 +278,7 @@ export default function ProviderPage() {
                 setBrowseTab("new");
                 await loadBrowse("new", genreId);
               }}
+              disabled={loadingBrowse && browseTab === "new"}
             >
               New
             </button>
@@ -270,12 +308,87 @@ export default function ProviderPage() {
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
         </div>
 
+        {/* Overlay: click outside closes search panel */}
+        {searchOpen && (
+          <div
+            onClick={closeSearch}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.35)",
+              zIndex: 30
+            }}
+          />
+        )}
+
+        {/* Netflix-style animated search rail (inside provider page) */}
+        <div
+          className={`searchPanel ${searchOpen ? "open" : ""}`}
+          style={{
+            position: "relative",
+            zIndex: 31
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="searchPanelHeader">
+            <div className="searchPanelTitle">
+              <h2 style={{ margin: 0 }}>Search {label}</h2>
+              <div className="muted">
+                {q.trim() ? `Results for “${q.trim()}”` : "Type to search…"}
+              </div>
+            </div>
+
+            <button className="searchCloseBtn" onClick={closeSearch} aria-label="Close search">
+              ✕
+            </button>
+          </div>
+
+          {!!results.length ? (
+            <div className="rail">
+              {results.map((r) => {
+                const isSaved = savedIds.has(r.watchmodeTitleId);
+                return (
+                  <TitleCard
+                    key={r.watchmodeTitleId}
+                    item={{ ...r, provider: providerKey }}
+                    action={
+                      isSaved ? (
+                        <button
+                          className="btn secondary"
+                          style={{ padding: "8px 10px", borderRadius: 10 }}
+                          onClick={() => remove(r.watchmodeTitleId)}
+                        >
+                          Remove
+                        </button>
+                      ) : (
+                        <button
+                          className="btn"
+                          style={{ padding: "8px 10px", borderRadius: 10 }}
+                          onClick={() => add(r)}
+                        >
+                          + Add
+                        </button>
+                      )
+                    }
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="card muted">
+              {q.trim() ? `No results found on ${label}.` : "Start typing a title, then press Enter."}
+            </div>
+          )}
+        </div>
+
         {/* Browse rail */}
         <div style={{ marginTop: 18 }}>
           <div className="rowTitle">
             <h2 style={{ margin: 0 }}>
               {browseTab === "popular" ? `Popular on ${label}` : `New on ${label}`}
-              {genreId !== "all" ? ` • ${genres.find((g) => g.id === genreId)?.name ?? ""}` : ""}
+              {genreId !== "all"
+                ? ` • ${genres.find((g) => g.id === genreId)?.name ?? ""}`
+                : ""}
             </h2>
             <div className="muted">{loadingBrowse ? "Loading…" : "Browse"}</div>
           </div>
@@ -337,47 +450,6 @@ export default function ProviderPage() {
             ))}
           </div>
         </div>
-
-        {/* Provider-restricted search results */}
-        {!!results.length && (
-          <div style={{ marginTop: 18 }}>
-            <div className="rowTitle">
-              <h2 style={{ margin: 0 }}>Search results</h2>
-              <div className="muted">Restricted to {label}</div>
-            </div>
-
-            <div className="rail">
-              {results.map((r) => {
-                const isSaved = savedIds.has(r.watchmodeTitleId);
-                return (
-                  <TitleCard
-                    key={r.watchmodeTitleId}
-                    item={{ ...r, provider: providerKey }}
-                    action={
-                      isSaved ? (
-                        <button
-                          className="btn secondary"
-                          style={{ padding: "8px 10px", borderRadius: 10 }}
-                          onClick={() => remove(r.watchmodeTitleId)}
-                        >
-                          Remove
-                        </button>
-                      ) : (
-                        <button
-                          className="btn"
-                          style={{ padding: "8px 10px", borderRadius: 10 }}
-                          onClick={() => add(r)}
-                        >
-                          + Add
-                        </button>
-                      )
-                    }
-                  />
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </>
   );
