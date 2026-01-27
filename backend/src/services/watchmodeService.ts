@@ -1,4 +1,4 @@
-import axios from "axios"
+import axios, { AxiosError } from "axios"
 import { cacheGet, cacheSet } from "./cacheService"
 import { PROVIDERS, type ProviderKey, labelFor } from "../types"
 
@@ -23,6 +23,45 @@ export type WatchmodeGenre = {
 	name: string
 }
 
+// --- Retry helper (handles 429 + transient errors) ---
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+function getStatus(err: any): number | undefined {
+	return (err as AxiosError)?.response?.status
+}
+
+function getRetryAfterMs(err: any): number | null {
+	const raw = (err as AxiosError)?.response?.headers?.["retry-after"]
+	const sec = Number(raw)
+	if (Number.isFinite(sec) && sec > 0) return sec * 1000
+	return null
+}
+
+async function axiosGetWithRetry<T>(url: string, config: any, attempts = 3): Promise<T> {
+	let lastErr: any
+
+	for (let i = 0; i < attempts; i++) {
+		try {
+			const res = await axios.get<T>(url, config)
+			return res.data
+		} catch (e: any) {
+			lastErr = e
+			const status = getStatus(e)
+
+			const shouldRetry = status === 429 || status === 502 || status === 503 || status === 504 || e?.code === "ECONNRESET" || e?.code === "ETIMEDOUT"
+
+			if (!shouldRetry || i === attempts - 1) break
+
+			const retryAfterMs = getRetryAfterMs(e)
+			const backoffMs = retryAfterMs ?? 500 * Math.pow(2, i) // 500, 1000, 2000
+			console.warn(`[watchmode] retry ${i + 1}/${attempts} status=${status} wait=${backoffMs}ms`)
+			await sleep(backoffMs)
+		}
+	}
+
+	throw lastErr
+}
+
 export async function watchmodeGetAllSources(): Promise<WatchmodeSource[]> {
 	requireKey()
 
@@ -30,14 +69,20 @@ export async function watchmodeGetAllSources(): Promise<WatchmodeSource[]> {
 	const cached = await cacheGet<WatchmodeSource[]>(cacheKey)
 	if (cached) return cached
 
-	const res = await axios.get(`${BASE_URL}/sources/`, {
-		params: { apiKey: API_KEY },
-		timeout: 15000,
-	})
+	try {
+		const data = await axiosGetWithRetry<WatchmodeSource[]>(`${BASE_URL}/sources/`, {
+			params: { apiKey: API_KEY },
+			timeout: 15000,
+		})
 
-	const data: WatchmodeSource[] = res.data ?? []
-	await cacheSet(cacheKey, data, 24 * 60 * 60) // 24h
-	return data
+		const sources: WatchmodeSource[] = data ?? []
+		await cacheSet(cacheKey, sources, 24 * 60 * 60) // 24h
+		return sources
+	} catch (e: any) {
+		// If we had cache we already returned it; here we just fail upward
+		console.error("[watchmodeGetAllSources] failed:", getStatus(e) ?? e?.message ?? e)
+		throw e
+	}
 }
 
 export async function watchmodeGetGenres(): Promise<WatchmodeGenre[]> {
@@ -47,14 +92,19 @@ export async function watchmodeGetGenres(): Promise<WatchmodeGenre[]> {
 	const cached = await cacheGet<WatchmodeGenre[]>(cacheKey)
 	if (cached) return cached
 
-	const res = await axios.get(`${BASE_URL}/genres/`, {
-		params: { apiKey: API_KEY },
-		timeout: 15000,
-	})
+	try {
+		const data = await axiosGetWithRetry<WatchmodeGenre[]>(`${BASE_URL}/genres/`, {
+			params: { apiKey: API_KEY },
+			timeout: 15000,
+		})
 
-	const data: WatchmodeGenre[] = res.data ?? []
-	await cacheSet(cacheKey, data, 7 * 24 * 60 * 60) // 7 days
-	return data
+		const genres: WatchmodeGenre[] = data ?? []
+		await cacheSet(cacheKey, genres, 7 * 24 * 60 * 60) // 7 days
+		return genres
+	} catch (e: any) {
+		console.error("[watchmodeGetGenres] failed:", getStatus(e) ?? e?.message ?? e)
+		throw e
+	}
 }
 
 /**
@@ -103,18 +153,24 @@ export async function watchmodeSearchTitles(query: string) {
 	const cached = await cacheGet<any[]>(cacheKey)
 	if (cached) return cached
 
-	const res = await axios.get(`${BASE_URL}/search/`, {
-		params: {
-			apiKey: API_KEY,
-			search_field: "name",
-			search_value: query,
-		},
-		timeout: 15000,
-	})
+	try {
+		const data = await axiosGetWithRetry<any>(`${BASE_URL}/search/`, {
+			params: {
+				apiKey: API_KEY,
+				search_field: "name",
+				search_value: query,
+			},
+			timeout: 15000,
+		})
 
-	const results = res.data?.title_results ?? []
-	await cacheSet(cacheKey, results, 10 * 60) // 10 minutes
-	return results
+		const results = data?.title_results ?? []
+		await cacheSet(cacheKey, results, 10 * 60) // 10 minutes
+		return results
+	} catch (e: any) {
+		console.warn("[watchmodeSearchTitles] failed:", getStatus(e) ?? e?.message ?? e)
+		// Search failures shouldn't crash the app
+		return []
+	}
 }
 
 export async function watchmodeGetSources(titleId: number) {
@@ -124,18 +180,26 @@ export async function watchmodeGetSources(titleId: number) {
 	const cached = await cacheGet<any[]>(cacheKey)
 	if (cached) return cached
 
-	const res = await axios.get(`${BASE_URL}/title/${titleId}/sources/`, {
-		params: { apiKey: API_KEY },
-		timeout: 15000,
-	})
+	try {
+		const data = await axiosGetWithRetry<any>(`${BASE_URL}/title/${titleId}/sources/`, {
+			params: { apiKey: API_KEY },
+			timeout: 15000,
+		})
 
-	const data = res.data ?? []
-	await cacheSet(cacheKey, data, 6 * 60 * 60) // 6 hours
-	return data
+		const sources = data ?? []
+		await cacheSet(cacheKey, sources, 6 * 60 * 60) // 6 hours
+		return sources
+	} catch (e: any) {
+		console.warn("[watchmodeGetSources] failed:", getStatus(e) ?? e?.message ?? e)
+		// Fail closed to empty list (prevents route crashes)
+		return []
+	}
 }
 
 /**
- * /v1/list-titles supports genres filter (single id or comma-separated). :contentReference[oaicite:2]{index=2}
+ * /v1/list-titles supports genres filter (single id or comma-separated).
+ * We cache each (provider + sort + page + limit + date range + genres).
+ * If Watchmode rate-limits us, we retry; if still failing, we return [] (home.ts handles safely).
  */
 export async function watchmodeListTitles(args: {
 	provider: ProviderKey
@@ -159,22 +223,29 @@ export async function watchmodeListTitles(args: {
 	const cached = await cacheGet<any[]>(cacheKey)
 	if (cached) return cached
 
-	const res = await axios.get(`${BASE_URL}/list-titles/`, {
-		params: {
-			apiKey: API_KEY,
-			source_ids: String(sourceId),
-			regions: "US",
-			sort_by: args.sortBy,
-			limit,
-			page,
-			...(args.releaseDateStart ? { release_date_start: args.releaseDateStart } : {}),
-			...(args.releaseDateEnd ? { release_date_end: args.releaseDateEnd } : {}),
-			...(genres ? { genres } : {}),
-		},
-		timeout: 15000,
-	})
+	try {
+		const data = await axiosGetWithRetry<any>(`${BASE_URL}/list-titles/`, {
+			params: {
+				apiKey: API_KEY,
+				source_ids: String(sourceId),
+				regions: "US",
+				sort_by: args.sortBy,
+				limit,
+				page,
+				...(args.releaseDateStart ? { release_date_start: args.releaseDateStart } : {}),
+				...(args.releaseDateEnd ? { release_date_end: args.releaseDateEnd } : {}),
+				...(genres ? { genres } : {}),
+			},
+			timeout: 15000,
+		})
 
-	const titles = res.data?.titles ?? res.data ?? []
-	await cacheSet(cacheKey, titles, 60 * 60) // 1 hour
-	return titles
+		const titles = data?.titles ?? data ?? []
+		await cacheSet(cacheKey, titles, 60 * 60) // 1 hour
+		return titles
+	} catch (e: any) {
+		const status = getStatus(e)
+		console.warn(`[watchmodeListTitles] failed provider=${args.provider} status=${status ?? "?"} msg=${e?.message ?? e}`)
+		// Return empty to avoid crashing callers (home.ts will degrade gracefully)
+		return []
+	}
 }
