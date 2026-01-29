@@ -3,7 +3,7 @@ import "dotenv/config"
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser"
-
+import providerRowsRoutes from "./routes/providerRows"
 import genresRoutes from "./routes/genres"
 import metaRoutes from "./routes/meta"
 import authRoutes from "./auth/authRoutes"
@@ -18,6 +18,7 @@ const app = express()
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
+app.use("/api", providerRowsRoutes)
 
 app.get("/health", (_req, res) => res.json({ ok: true }))
 

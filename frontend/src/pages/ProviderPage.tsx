@@ -4,7 +4,7 @@ import Header from "../components/Header";
 import TitleCard from "../components/TitleCard";
 import { api } from "../api/client";
 
-type Item = {
+type RowItem = {
   watchmodeTitleId: number;
   title: string;
   type: string;
@@ -13,189 +13,195 @@ type Item = {
   provider?: string;
 };
 
-type Genre = { id: number; name: string };
+type Row = {
+  key: string;
+  kind: string; // my_list | popular_tv | popular_movies | new | genre | genre_tv | genre_movies
+  title: string;
+  items: RowItem[];
+  page: number;
+  canLoadMore: boolean;
+  genreId?: number;
+};
 
-type ProviderMeta = {
+type ProviderRowsResponse = {
   provider: string;
   label: string;
-  logoUrl: string | null;
+  mode: "all" | "shows" | "movies";
+  genreId: number | null;
+  includeGenres?: boolean;
+  rows: Row[];
 };
+
+type Genre = { id: number; name: string };
+
+function coerceGenres(payload: any): Genre[] {
+  // Accept either:
+  // 1) [ {id,name}, ... ]
+  // 2) { genres: [ {id,name}, ... ] }
+  const arr = Array.isArray(payload) ? payload : Array.isArray(payload?.genres) ? payload.genres : [];
+  return arr
+    .filter((g: any) => g && typeof g.id === "number" && typeof g.name === "string")
+    .map((g: any) => ({ id: g.id, name: g.name }));
+}
 
 export default function ProviderPage() {
   const nav = useNavigate();
-  const { provider } = useParams();
+  const params = useParams();
+  const provider = String(params.provider || "").toUpperCase();
 
-  const providerKey = useMemo(() => String(provider || "").toUpperCase(), [provider]);
-
-  const [label, setLabel] = useState(providerKey);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-
-  const [genres, setGenres] = useState<Genre[]>([]);
-  const [genreId, setGenreId] = useState<number | "all">("all");
-
-  const [saved, setSaved] = useState<Item[]>([]);
-  const [browseTab, setBrowseTab] = useState<"popular" | "new">("popular");
-  const [browseItems, setBrowseItems] = useState<Item[]>([]);
-
-  // Search state (animated panel)
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<Item[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
-
+  const [label, setLabel] = useState(provider);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [loadingBrowse, setLoadingBrowse] = useState(false);
-  const [loadingSearch, setLoadingSearch] = useState(false);
 
-  const loadMeta = async () => {
-    const data = await api<{ providers: ProviderMeta[] }>("/api/meta/providers");
-    const m = (data.providers || []).find((p) => p.provider === providerKey);
-    if (m) {
-      setLabel(m.label);
-      setLogoUrl(m.logoUrl);
-    } else {
-      setLabel(providerKey);
-      setLogoUrl(null);
-    }
-  };
+  // Controls
+  const [mode, setMode] = useState<"all" | "shows" | "movies">("all");
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [genreId, setGenreId] = useState<string>("all"); // "all" | "<id>"
+
+  // Lazy-load genres flag (only used when genreId === "all")
+  const [includeGenres, setIncludeGenres] = useState(false);
+  const [loadingGenres, setLoadingGenres] = useState(false);
+
+  const isSpecificGenre = genreId !== "all";
+
+  // Track per-row pagination locally (so “Load more” appends)
+  const rowState = useMemo(() => {
+    const map = new Map<string, { page: number; canLoadMore: boolean; genreId?: number; kind: string }>();
+    for (const r of rows) map.set(r.key, { page: r.page, canLoadMore: r.canLoadMore, genreId: r.genreId, kind: r.kind });
+    return map;
+  }, [rows]);
 
   const loadGenres = async () => {
-    const data = await api<{ genres: Genre[] }>("/api/genres");
-    setGenres(data.genres || []);
-  };
-
-  const loadProviderSaved = async () => {
-    const data = await api<{ provider: string; items: any[] }>(`/api/provider/${providerKey}`);
-    setSaved(
-      (data.items || []).map((x: any) => ({
-        watchmodeTitleId: x.watchmodeTitleId,
-        title: x.title,
-        type: x.type,
-        poster: x.poster ?? null,
-        watchUrl: x.watchUrl ?? null,
-        provider: providerKey
-      }))
-    );
-  };
-
-  const loadBrowse = async (tab: "popular" | "new", g: number | "all") => {
-    setLoadingBrowse(true);
-    setErr(null);
     try {
-      const genreParam = g === "all" ? "" : `&genreId=${encodeURIComponent(String(g))}`;
-      const data = await api<{ items: any[] }>(
-        `/api/provider/${providerKey}/browse?tab=${encodeURIComponent(tab)}${genreParam}`
-      );
-      setBrowseItems(
-        (data.items || []).map((x: any) => ({
-          watchmodeTitleId: x.watchmodeTitleId,
-          title: x.title,
-          type: x.type,
-          poster: x.poster ?? null,
-          watchUrl: x.watchUrl ?? null,
-          provider: providerKey
-        }))
-      );
-    } catch (e: any) {
-      setErr(e?.message ?? "Failed to load browse");
-    } finally {
-      setLoadingBrowse(false);
+      const payload = await api<any>("/api/genres");
+      setGenres(coerceGenres(payload));
+    } catch {
+      setGenres([]);
     }
   };
 
-  // Load page data
-  useEffect(() => {
-    (async () => {
-      try {
-        await Promise.all([loadMeta(), loadGenres(), loadProviderSaved()]);
-      } catch (e: any) {
-        setErr(e?.message ?? "Failed to load provider page");
-      }
+  const loadRows = async (opts?: { forceIncludeGenres?: boolean }) => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("mode", mode);
+      qs.set("genreId", genreId);
 
-      // Always load Popular first so page isn't blank
-      setBrowseTab("popular");
-      setGenreId("all");
-      await loadBrowse("popular", "all");
-    })();
+      const wantGenres = (opts?.forceIncludeGenres ?? includeGenres) && !isSpecificGenre;
+      if (wantGenres) qs.set("includeGenres", "1");
+
+      const data = await api<ProviderRowsResponse>(`/api/provider/${provider}/rows?${qs.toString()}`);
+      setLabel(data.label || provider);
+      setRows(data.rows || []);
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to load provider rows");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGenres();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerKey]);
+  }, []);
 
-  // Option A: if query cleared, clear results immediately
+  // When provider/mode/genre changes:
+  // - If user selects a specific genre, we always do 3-row mode and disable includeGenres.
   useEffect(() => {
-    if (q.trim() === "") setResults([]);
-  }, [q]);
-
-  const closeSearch = () => {
-    setSearchOpen(false);
-    setQ("");
-    setResults([]);
-    setErr(null);
-  };
-
-  const runProviderSearch = async () => {
-    const term = q.trim();
-
-    // Option B: Enter on empty collapses + clears
-    if (!term) {
-      setResults([]);
-      setSearchOpen(false);
-      return;
+    if (isSpecificGenre) {
+      setIncludeGenres(false);
     }
+    loadRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, mode, genreId]);
 
-    setLoadingSearch(true);
-    setErr(null);
-    setResults([]);
-
-    try {
-      const data = await api<any[]>(
-        `/api/search?q=${encodeURIComponent(term)}&provider=${encodeURIComponent(providerKey)}`
-      );
-      setResults(
-        (data || []).map((r: any) => ({
-          watchmodeTitleId: r.watchmodeTitleId,
-          title: r.title,
-          type: r.type,
-          poster: r.poster ?? null,
-          watchUrl: r.watchUrl ?? null,
-          provider: providerKey
-        }))
-      );
-    } catch (e: any) {
-      setErr(e?.message ?? "Search failed");
-    } finally {
-      setLoadingSearch(false);
-    }
-  };
-
-  const add = async (item: Item) => {
+  const addToList = async (item: RowItem) => {
     await api("/api/lists/add", {
       method: "POST",
       body: JSON.stringify({
-        provider: providerKey,
+        provider,
         watchmodeTitleId: item.watchmodeTitleId,
         title: item.title,
         type: item.type,
         poster: item.poster,
-        watchUrl: item.watchUrl
+        watchUrl: item.watchUrl ?? null
       })
     });
-    await loadProviderSaved();
+    await loadRows();
   };
 
-  const remove = async (watchmodeTitleId: number) => {
+  const removeFromList = async (watchmodeTitleId: number) => {
     await api("/api/lists/remove", {
       method: "POST",
-      body: JSON.stringify({ provider: providerKey, watchmodeTitleId })
+      body: JSON.stringify({ provider, watchmodeTitleId })
     });
-    await loadProviderSaved();
+    await loadRows();
   };
 
-  const savedIds = useMemo(() => new Set(saved.map((s) => s.watchmodeTitleId)), [saved]);
+  const loadMore = async (rowKey: string) => {
+    const st = rowState.get(rowKey);
+    if (!st || !st.canLoadMore) return;
+
+    const nextPage = st.page + 1;
+
+    const qs = new URLSearchParams();
+    qs.set("kind", st.kind);
+    qs.set("mode", mode);
+    qs.set("page", String(nextPage));
+
+    // genre row ids
+    if (typeof st.genreId === "number") qs.set("genreId", String(st.genreId));
+    if ((st.kind === "genre_tv" || st.kind === "genre_movies") && genreId !== "all") {
+      qs.set("genreId", String(genreId));
+    }
+
+    const data = await api<{ page: number; canLoadMore: boolean; items: RowItem[] }>(
+      `/api/provider/${provider}/browse?${qs.toString()}`
+    );
+
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.key !== rowKey) return r;
+        return {
+          ...r,
+          page: data.page,
+          canLoadMore: data.canLoadMore,
+          items: [...(r.items || []), ...(data.items || [])]
+        };
+      })
+    );
+  };
+
+  const onLoadGenres = async () => {
+    if (isSpecificGenre) return;
+    setLoadingGenres(true);
+    try {
+      setIncludeGenres(true);
+      await loadRows({ forceIncludeGenres: true });
+    } finally {
+      setLoadingGenres(false);
+    }
+  };
+
+  const ToggleBtn = ({ value, text }: { value: "all" | "shows" | "movies"; text: string }) => (
+    <button
+      className={`btn ${mode === value ? "" : "secondary"}`}
+      onClick={() => setMode(value)}
+      style={{ borderRadius: 999, padding: "8px 12px" }}
+      type="button"
+    >
+      {text}
+    </button>
+  );
 
   return (
     <>
       <Header
-        right={
-          <button className="btn secondary" onClick={() => nav("/app")}>
+        left={
+          <button className="btn secondary" onClick={() => nav("/app")} style={{ borderRadius: 12 }}>
             ← Back
           </button>
         }
@@ -203,101 +209,29 @@ export default function ProviderPage() {
 
       <div className="page">
         <div className="card">
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt=""
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 12,
-                  objectFit: "contain",
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  padding: 6
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: 12,
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.10)"
-                }}
-              />
-            )}
+          <h1 style={{ marginTop: 0 }}>{label}</h1>
+          <p className="muted" style={{ marginTop: 6 }}>
+            Browse curated rows for this service, or filter by TV/Movies and genre.
+          </p>
 
-            <div>
-              <h1 style={{ margin: 0 }}>{label}</h1>
-              <div className="muted">Browse Popular/New + Genre, or search within {label}.</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <ToggleBtn value="all" text="TV Shows & Movies" />
+              <ToggleBtn value="shows" text="TV Shows" />
+              <ToggleBtn value="movies" text="Movies" />
             </div>
-          </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-            <input
-              className="input"
-              style={{ maxWidth: 560 }}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onFocus={() => setSearchOpen(true)}
-              placeholder={`Search ${label}…`}
-              onKeyDown={(e) => (e.key === "Enter" ? runProviderSearch() : null)}
-            />
-            <button className="btn" onClick={runProviderSearch} disabled={loadingSearch}>
-              {loadingSearch ? "Searching…" : "Search"}
-            </button>
-          </div>
-
-          {/* Tabs + Genre */}
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              marginTop: 12,
-              flexWrap: "wrap",
-              alignItems: "center"
-            }}
-          >
-            <button
-              className={`btn ${browseTab === "popular" ? "" : "secondary"}`}
-              onClick={async () => {
-                setBrowseTab("popular");
-                await loadBrowse("popular", genreId);
-              }}
-              disabled={loadingBrowse && browseTab === "popular"}
-            >
-              Popular
-            </button>
-
-            <button
-              className={`btn ${browseTab === "new" ? "" : "secondary"}`}
-              onClick={async () => {
-                setBrowseTab("new");
-                await loadBrowse("new", genreId);
-              }}
-              disabled={loadingBrowse && browseTab === "new"}
-            >
-              New
-            </button>
-
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginLeft: 8 }}>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
               <div className="muted">Genre</div>
               <select
                 className="input"
                 style={{ width: 260 }}
                 value={genreId}
-                onChange={async (e) => {
-                  const v = e.target.value === "all" ? "all" : Number(e.target.value);
-                  setGenreId(v as any);
-                  await loadBrowse(browseTab, v as any);
-                }}
+                onChange={(e) => setGenreId(e.target.value)}
               >
                 <option value="all">All genres</option>
-                {genres.map((g) => (
-                  <option key={g.id} value={g.id}>
+                {(Array.isArray(genres) ? genres : []).map((g) => (
+                  <option key={g.id} value={String(g.id)}>
                     {g.name}
                   </option>
                 ))}
@@ -305,151 +239,81 @@ export default function ProviderPage() {
             </div>
           </div>
 
+          {!isSpecificGenre && (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+              <button className="btn secondary" onClick={onLoadGenres} disabled={includeGenres || loadingGenres}>
+                {includeGenres ? "Genre rows loaded" : loadingGenres ? "Loading genre rows…" : "Load genre rows"}
+              </button>
+            </div>
+          )}
+
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
         </div>
 
-        {/* Overlay: click outside closes search panel */}
-        {searchOpen && (
-          <div
-            onClick={closeSearch}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.35)",
-              zIndex: 30
-            }}
-          />
-        )}
-
-        {/* Netflix-style animated search rail (inside provider page) */}
-        <div
-          className={`searchPanel ${searchOpen ? "open" : ""}`}
-          style={{
-            position: "relative",
-            zIndex: 31
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="searchPanelHeader">
-            <div className="searchPanelTitle">
-              <h2 style={{ margin: 0 }}>Search {label}</h2>
-              <div className="muted">
-                {q.trim() ? `Results for “${q.trim()}”` : "Type to search…"}
-              </div>
-            </div>
-
-            <button className="searchCloseBtn" onClick={closeSearch} aria-label="Close search">
-              ✕
-            </button>
+        {loading ? (
+          <div className="card muted" style={{ marginTop: 14 }}>
+            Loading rows…
           </div>
+        ) : (
+          <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
+            {rows.map((row) => {
+              const isMyList = row.kind === "my_list";
 
-          {!!results.length ? (
-            <div className="rail">
-              {results.map((r) => {
-                const isSaved = savedIds.has(r.watchmodeTitleId);
-                return (
-                  <TitleCard
-                    key={r.watchmodeTitleId}
-                    item={{ ...r, provider: providerKey }}
-                    action={
-                      isSaved ? (
-                        <button
-                          className="btn secondary"
-                          style={{ padding: "8px 10px", borderRadius: 10 }}
-                          onClick={() => remove(r.watchmodeTitleId)}
-                        >
-                          Remove
-                        </button>
-                      ) : (
-                        <button
-                          className="btn"
-                          style={{ padding: "8px 10px", borderRadius: 10 }}
-                          onClick={() => add(r)}
-                        >
-                          + Add
-                        </button>
-                      )
-                    }
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <div className="card muted">
-              {q.trim() ? `No results found on ${label}.` : "Start typing a title, then press Enter."}
-            </div>
-          )}
-        </div>
-
-        {/* Browse rail */}
-        <div style={{ marginTop: 18 }}>
-          <div className="rowTitle">
-            <h2 style={{ margin: 0 }}>
-              {browseTab === "popular" ? `Popular on ${label}` : `New on ${label}`}
-              {genreId !== "all"
-                ? ` • ${genres.find((g) => g.id === genreId)?.name ?? ""}`
-                : ""}
-            </h2>
-            <div className="muted">{loadingBrowse ? "Loading…" : "Browse"}</div>
-          </div>
-
-          <div className="rail">
-            {browseItems.map((b) => {
-              const isSaved = savedIds.has(b.watchmodeTitleId);
               return (
-                <TitleCard
-                  key={b.watchmodeTitleId}
-                  item={{ ...b, provider: providerKey }}
-                  action={
-                    isSaved ? (
-                      <button
-                        className="btn secondary"
-                        style={{ padding: "8px 10px", borderRadius: 10 }}
-                        onClick={() => remove(b.watchmodeTitleId)}
-                      >
-                        Remove
+                <div key={row.key} className="card">
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                    <h2 style={{ margin: 0 }}>{row.title}</h2>
+                    <div className="muted" style={{ marginLeft: "auto" }}>
+                      {row.items?.length ? `${row.items.length} items` : "No items"}
+                    </div>
+                  </div>
+
+                  <div className="rail" style={{ marginTop: 12 }}>
+                    {(row.items || []).map((it) => (
+                      <TitleCard
+                        key={`${row.key}-${it.watchmodeTitleId}`}
+                        item={it}
+                        action={
+                          isMyList ? (
+                            <button
+                              className="btn secondary"
+                              style={{ padding: "8px 10px", borderRadius: 10 }}
+                              onClick={() => removeFromList(it.watchmodeTitleId)}
+                            >
+                              Remove
+                            </button>
+                          ) : (
+                            <button
+                              className="btn"
+                              style={{ padding: "8px 10px", borderRadius: 10 }}
+                              onClick={() => addToList(it)}
+                            >
+                              + Add
+                            </button>
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+
+                  {row.canLoadMore && row.kind !== "my_list" && (
+                    <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+                      <button className="btn secondary" onClick={() => loadMore(row.key)}>
+                        Load more
                       </button>
-                    ) : (
-                      <button
-                        className="btn"
-                        style={{ padding: "8px 10px", borderRadius: 10 }}
-                        onClick={() => add(b)}
-                      >
-                        + Add
-                      </button>
-                    )
-                  }
-                />
+                    </div>
+                  )}
+                </div>
               );
             })}
-          </div>
-        </div>
 
-        {/* Saved rail */}
-        <div style={{ marginTop: 18 }}>
-          <div className="rowTitle">
-            <h2 style={{ margin: 0 }}>Your saved {label} list</h2>
-            <div className="muted">{saved.length} saved</div>
+            {!isSpecificGenre && !includeGenres && (
+              <div className="card muted">
+                Genre rows are available — click <b>Load genre rows</b> above to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
+              </div>
+            )}
           </div>
-
-          <div className="rail">
-            {saved.map((s) => (
-              <TitleCard
-                key={s.watchmodeTitleId}
-                item={{ ...s, provider: providerKey }}
-                action={
-                  <button
-                    className="btn secondary"
-                    style={{ padding: "8px 10px", borderRadius: 10 }}
-                    onClick={() => remove(s.watchmodeTitleId)}
-                  >
-                    Remove
-                  </button>
-                }
-              />
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </>
   );

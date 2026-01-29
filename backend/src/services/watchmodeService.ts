@@ -9,6 +9,56 @@ function requireKey() {
 	if (!API_KEY) throw new Error("WATCHMODE_API_KEY missing in backend/.env")
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+function getStatus(err: any): number | undefined {
+	return (err as AxiosError)?.response?.status
+}
+
+function getRetryAfterMs(err: any): number | null {
+	const raw = (err as AxiosError)?.response?.headers?.["retry-after"]
+	const sec = Number(raw)
+	if (Number.isFinite(sec) && sec > 0) return sec * 1000
+	return null
+}
+
+// Track rate-limit signal for UI messaging + caching decisions
+let lastRateLimitAt = 0
+export function watchmodeWasRateLimitedRecently(withinMs = 5 * 60 * 1000) {
+	return lastRateLimitAt > 0 && Date.now() - lastRateLimitAt < withinMs
+}
+
+async function axiosGetWithRetry<T>(url: string, config: any, attempts = 3): Promise<T> {
+	let lastErr: any
+
+	for (let i = 0; i < attempts; i++) {
+		try {
+			const res = await axios.get<T>(url, config)
+			return res.data
+		} catch (e: any) {
+			lastErr = e
+			const status = getStatus(e)
+
+			if (status === 429) lastRateLimitAt = Date.now()
+
+			const shouldRetry = status === 429 || status === 502 || status === 503 || status === 504 || e?.code === "ECONNRESET" || e?.code === "ETIMEDOUT"
+
+			if (!shouldRetry || i === attempts - 1) break
+
+			// ✅ Prefer Retry-After if Watchmode provides it
+			const retryAfterMs = getRetryAfterMs(e)
+
+			// ✅ Otherwise use exponential backoff starting at 2s
+			const backoffMs = retryAfterMs ?? 2000 * Math.pow(2, i) // 2000, 4000, 8000
+
+			console.warn(`[watchmode] retry ${i + 1}/${attempts} status=${status} wait=${backoffMs}ms`)
+			await sleep(backoffMs)
+		}
+	}
+
+	throw lastErr
+}
+
 export type WatchmodeSource = {
 	id: number
 	name: string
@@ -23,45 +73,6 @@ export type WatchmodeGenre = {
 	name: string
 }
 
-// --- Retry helper (handles 429 + transient errors) ---
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-function getStatus(err: any): number | undefined {
-	return (err as AxiosError)?.response?.status
-}
-
-function getRetryAfterMs(err: any): number | null {
-	const raw = (err as AxiosError)?.response?.headers?.["retry-after"]
-	const sec = Number(raw)
-	if (Number.isFinite(sec) && sec > 0) return sec * 1000
-	return null
-}
-
-async function axiosGetWithRetry<T>(url: string, config: any, attempts = 3): Promise<T> {
-	let lastErr: any
-
-	for (let i = 0; i < attempts; i++) {
-		try {
-			const res = await axios.get<T>(url, config)
-			return res.data
-		} catch (e: any) {
-			lastErr = e
-			const status = getStatus(e)
-
-			const shouldRetry = status === 429 || status === 502 || status === 503 || status === 504 || e?.code === "ECONNRESET" || e?.code === "ETIMEDOUT"
-
-			if (!shouldRetry || i === attempts - 1) break
-
-			const retryAfterMs = getRetryAfterMs(e)
-			const backoffMs = retryAfterMs ?? 500 * Math.pow(2, i) // 500, 1000, 2000
-			console.warn(`[watchmode] retry ${i + 1}/${attempts} status=${status} wait=${backoffMs}ms`)
-			await sleep(backoffMs)
-		}
-	}
-
-	throw lastErr
-}
-
 export async function watchmodeGetAllSources(): Promise<WatchmodeSource[]> {
 	requireKey()
 
@@ -69,20 +80,14 @@ export async function watchmodeGetAllSources(): Promise<WatchmodeSource[]> {
 	const cached = await cacheGet<WatchmodeSource[]>(cacheKey)
 	if (cached) return cached
 
-	try {
-		const data = await axiosGetWithRetry<WatchmodeSource[]>(`${BASE_URL}/sources/`, {
-			params: { apiKey: API_KEY },
-			timeout: 15000,
-		})
+	const data = await axiosGetWithRetry<WatchmodeSource[]>(`${BASE_URL}/sources/`, {
+		params: { apiKey: API_KEY },
+		timeout: 15000,
+	})
 
-		const sources: WatchmodeSource[] = data ?? []
-		await cacheSet(cacheKey, sources, 24 * 60 * 60) // 24h
-		return sources
-	} catch (e: any) {
-		// If we had cache we already returned it; here we just fail upward
-		console.error("[watchmodeGetAllSources] failed:", getStatus(e) ?? e?.message ?? e)
-		throw e
-	}
+	const sources: WatchmodeSource[] = data ?? []
+	await cacheSet(cacheKey, sources, 24 * 60 * 60)
+	return sources
 }
 
 export async function watchmodeGetGenres(): Promise<WatchmodeGenre[]> {
@@ -92,19 +97,14 @@ export async function watchmodeGetGenres(): Promise<WatchmodeGenre[]> {
 	const cached = await cacheGet<WatchmodeGenre[]>(cacheKey)
 	if (cached) return cached
 
-	try {
-		const data = await axiosGetWithRetry<WatchmodeGenre[]>(`${BASE_URL}/genres/`, {
-			params: { apiKey: API_KEY },
-			timeout: 15000,
-		})
+	const data = await axiosGetWithRetry<WatchmodeGenre[]>(`${BASE_URL}/genres/`, {
+		params: { apiKey: API_KEY },
+		timeout: 15000,
+	})
 
-		const genres: WatchmodeGenre[] = data ?? []
-		await cacheSet(cacheKey, genres, 7 * 24 * 60 * 60) // 7 days
-		return genres
-	} catch (e: any) {
-		console.error("[watchmodeGetGenres] failed:", getStatus(e) ?? e?.message ?? e)
-		throw e
-	}
+	const genres: WatchmodeGenre[] = data ?? []
+	await cacheSet(cacheKey, genres, 7 * 24 * 60 * 60)
+	return genres
 }
 
 /**
@@ -122,6 +122,7 @@ export async function watchmodeResolveProviderMeta(provider: ProviderKey): Promi
 
 	const sources = await watchmodeGetAllSources()
 	const def = PROVIDERS.find((p) => p.key === provider)
+
 	if (!def) {
 		const fallback = { provider, label: labelFor(provider), sourceId: null, logoUrl: null }
 		await cacheSet(cacheKey, fallback, 7 * 24 * 60 * 60)
@@ -164,11 +165,10 @@ export async function watchmodeSearchTitles(query: string) {
 		})
 
 		const results = data?.title_results ?? []
-		await cacheSet(cacheKey, results, 10 * 60) // 10 minutes
+		await cacheSet(cacheKey, results, 10 * 60)
 		return results
 	} catch (e: any) {
 		console.warn("[watchmodeSearchTitles] failed:", getStatus(e) ?? e?.message ?? e)
-		// Search failures shouldn't crash the app
 		return []
 	}
 }
@@ -187,28 +187,27 @@ export async function watchmodeGetSources(titleId: number) {
 		})
 
 		const sources = data ?? []
-		await cacheSet(cacheKey, sources, 6 * 60 * 60) // 6 hours
+		await cacheSet(cacheKey, sources, 6 * 60 * 60)
 		return sources
 	} catch (e: any) {
 		console.warn("[watchmodeGetSources] failed:", getStatus(e) ?? e?.message ?? e)
-		// Fail closed to empty list (prevents route crashes)
 		return []
 	}
 }
 
 /**
- * /v1/list-titles supports genres filter (single id or comma-separated).
- * We cache each (provider + sort + page + limit + date range + genres).
- * If Watchmode rate-limits us, we retry; if still failing, we return [] (home.ts handles safely).
+ * list-titles
+ * Supports: genres, date range, pagination, and types ("movie" | "tv_series")
  */
 export async function watchmodeListTitles(args: {
 	provider: ProviderKey
 	sortBy: "popularity_desc" | "release_date_desc"
 	limit?: number
 	page?: number
-	releaseDateStart?: string // YYYYMMDD
-	releaseDateEnd?: string // YYYYMMDD
-	genreIds?: number[] // optional
+	releaseDateStart?: string
+	releaseDateEnd?: string
+	genreIds?: number[]
+	types?: "movie" | "tv_series"
 }) {
 	requireKey()
 
@@ -218,8 +217,9 @@ export async function watchmodeListTitles(args: {
 	const limit = args.limit ?? 24
 	const page = args.page ?? 1
 	const genres = args.genreIds && args.genreIds.length ? args.genreIds.join(",") : ""
+	const types = args.types ?? ""
 
-	const cacheKey = `wm:list:${args.provider}:${args.sortBy}:${page}:${limit}:${args.releaseDateStart ?? ""}:${args.releaseDateEnd ?? ""}:g=${genres}`
+	const cacheKey = `wm:list:${args.provider}:${args.sortBy}:${page}:${limit}:${args.releaseDateStart ?? ""}:${args.releaseDateEnd ?? ""}:g=${genres}:t=${types}`
 	const cached = await cacheGet<any[]>(cacheKey)
 	if (cached) return cached
 
@@ -232,6 +232,7 @@ export async function watchmodeListTitles(args: {
 				sort_by: args.sortBy,
 				limit,
 				page,
+				...(args.types ? { types: args.types } : {}),
 				...(args.releaseDateStart ? { release_date_start: args.releaseDateStart } : {}),
 				...(args.releaseDateEnd ? { release_date_end: args.releaseDateEnd } : {}),
 				...(genres ? { genres } : {}),
@@ -240,12 +241,11 @@ export async function watchmodeListTitles(args: {
 		})
 
 		const titles = data?.titles ?? data ?? []
-		await cacheSet(cacheKey, titles, 60 * 60) // 1 hour
+		await cacheSet(cacheKey, titles, 60 * 60)
 		return titles
 	} catch (e: any) {
 		const status = getStatus(e)
-		console.warn(`[watchmodeListTitles] failed provider=${args.provider} status=${status ?? "?"} msg=${e?.message ?? e}`)
-		// Return empty to avoid crashing callers (home.ts will degrade gracefully)
+		console.warn(`[watchmodeListTitles] failed provider=${args.provider} status=${status ?? "?"}`)
 		return []
 	}
 }
