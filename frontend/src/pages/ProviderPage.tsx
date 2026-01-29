@@ -15,7 +15,7 @@ type RowItem = {
 
 type Row = {
   key: string;
-  kind: string; // my_list | popular_tv | popular_movies | new | genre | genre_tv | genre_movies
+  kind: string;
   title: string;
   items: RowItem[];
   page: number;
@@ -29,15 +29,13 @@ type ProviderRowsResponse = {
   mode: "all" | "shows" | "movies";
   genreId: number | null;
   includeGenres?: boolean;
+  rateLimited?: boolean;
   rows: Row[];
 };
 
 type Genre = { id: number; name: string };
 
 function coerceGenres(payload: any): Genre[] {
-  // Accept either:
-  // 1) [ {id,name}, ... ]
-  // 2) { genres: [ {id,name}, ... ] }
   const arr = Array.isArray(payload) ? payload : Array.isArray(payload?.genres) ? payload.genres : [];
   return arr
     .filter((g: any) => g && typeof g.id === "number" && typeof g.name === "string")
@@ -54,18 +52,18 @@ export default function ProviderPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
+  const [rateLimited, setRateLimited] = useState(false);
+
   // Controls
   const [mode, setMode] = useState<"all" | "shows" | "movies">("all");
   const [genres, setGenres] = useState<Genre[]>([]);
-  const [genreId, setGenreId] = useState<string>("all"); // "all" | "<id>"
+  const [genreId, setGenreId] = useState<string>("all");
 
-  // Lazy-load genres flag (only used when genreId === "all")
   const [includeGenres, setIncludeGenres] = useState(false);
   const [loadingGenres, setLoadingGenres] = useState(false);
 
   const isSpecificGenre = genreId !== "all";
 
-  // Track per-row pagination locally (so “Load more” appends)
   const rowState = useMemo(() => {
     const map = new Map<string, { page: number; canLoadMore: boolean; genreId?: number; kind: string }>();
     for (const r of rows) map.set(r.key, { page: r.page, canLoadMore: r.canLoadMore, genreId: r.genreId, kind: r.kind });
@@ -95,9 +93,11 @@ export default function ProviderPage() {
       const data = await api<ProviderRowsResponse>(`/api/provider/${provider}/rows?${qs.toString()}`);
       setLabel(data.label || provider);
       setRows(data.rows || []);
+      setRateLimited(!!data.rateLimited);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load provider rows");
       setRows([]);
+      setRateLimited(false);
     } finally {
       setLoading(false);
     }
@@ -108,12 +108,8 @@ export default function ProviderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When provider/mode/genre changes:
-  // - If user selects a specific genre, we always do 3-row mode and disable includeGenres.
   useEffect(() => {
-    if (isSpecificGenre) {
-      setIncludeGenres(false);
-    }
+    if (isSpecificGenre) setIncludeGenres(false);
     loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, mode, genreId]);
@@ -152,7 +148,6 @@ export default function ProviderPage() {
     qs.set("mode", mode);
     qs.set("page", String(nextPage));
 
-    // genre row ids
     if (typeof st.genreId === "number") qs.set("genreId", String(st.genreId));
     if ((st.kind === "genre_tv" || st.kind === "genre_movies") && genreId !== "all") {
       qs.set("genreId", String(genreId));
@@ -163,15 +158,7 @@ export default function ProviderPage() {
     );
 
     setRows((prev) =>
-      prev.map((r) => {
-        if (r.key !== rowKey) return r;
-        return {
-          ...r,
-          page: data.page,
-          canLoadMore: data.canLoadMore,
-          items: [...(r.items || []), ...(data.items || [])]
-        };
-      })
+      prev.map((r) => (r.key !== rowKey ? r : { ...r, page: data.page, canLoadMore: data.canLoadMore, items: [...(r.items || []), ...(data.items || [])] }))
     );
   };
 
@@ -199,20 +186,28 @@ export default function ProviderPage() {
 
   return (
     <>
-      <Header
-        left={
-          <button className="btn secondary" onClick={() => nav("/app")} style={{ borderRadius: 12 }}>
-            ← Back
-          </button>
-        }
-      />
+      <Header />
 
       <div className="page">
+        {/* Always-visible back button (in case Header doesn't render left props) */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          <button className="btn secondary" onClick={() => nav("/app")} style={{ borderRadius: 12 }}>
+            ← Back to Home
+          </button>
+        </div>
+
         <div className="card">
           <h1 style={{ marginTop: 0 }}>{label}</h1>
           <p className="muted" style={{ marginTop: 6 }}>
             Browse curated rows for this service, or filter by TV/Movies and genre.
           </p>
+
+          {rateLimited && (
+            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
+              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode.</div>
+              <div className="muted" style={{ marginTop: 4 }}>Try again in a few minutes.</div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
             <div style={{ display: "flex", gap: 8 }}>
@@ -223,42 +218,24 @@ export default function ProviderPage() {
 
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
               <div className="muted">Genre</div>
-              <select
-                className="input"
-                style={{ width: 260 }}
-                value={genreId}
-                onChange={(e) => setGenreId(e.target.value)}
-              >
+              <select className="input" style={{ width: 260 }} value={genreId} onChange={(e) => setGenreId(e.target.value)}>
                 <option value="all">All genres</option>
                 {(Array.isArray(genres) ? genres : []).map((g) => (
-                  <option key={g.id} value={String(g.id)}>
-                    {g.name}
-                  </option>
+                  <option key={g.id} value={String(g.id)}>{g.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {!isSpecificGenre && (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-              <button className="btn secondary" onClick={onLoadGenres} disabled={includeGenres || loadingGenres}>
-                {includeGenres ? "Genre rows loaded" : loadingGenres ? "Loading genre rows…" : "Load genre rows"}
-              </button>
-            </div>
-          )}
-
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
         </div>
 
         {loading ? (
-          <div className="card muted" style={{ marginTop: 14 }}>
-            Loading rows…
-          </div>
+          <div className="card muted" style={{ marginTop: 14 }}>Loading rows…</div>
         ) : (
           <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
             {rows.map((row) => {
               const isMyList = row.kind === "my_list";
-
               return (
                 <div key={row.key} className="card">
                   <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
@@ -275,19 +252,11 @@ export default function ProviderPage() {
                         item={it}
                         action={
                           isMyList ? (
-                            <button
-                              className="btn secondary"
-                              style={{ padding: "8px 10px", borderRadius: 10 }}
-                              onClick={() => removeFromList(it.watchmodeTitleId)}
-                            >
+                            <button className="btn secondary" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => removeFromList(it.watchmodeTitleId)}>
                               Remove
                             </button>
                           ) : (
-                            <button
-                              className="btn"
-                              style={{ padding: "8px 10px", borderRadius: 10 }}
-                              onClick={() => addToList(it)}
-                            >
+                            <button className="btn" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => addToList(it)}>
                               + Add
                             </button>
                           )
@@ -298,18 +267,22 @@ export default function ProviderPage() {
 
                   {row.canLoadMore && row.kind !== "my_list" && (
                     <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-                      <button className="btn secondary" onClick={() => loadMore(row.key)}>
-                        Load more
-                      </button>
+                      <button className="btn secondary" onClick={() => loadMore(row.key)}>Load more</button>
                     </div>
                   )}
                 </div>
               );
             })}
 
+            {/* Bottom helper + button (requested) */}
             {!isSpecificGenre && !includeGenres && (
               <div className="card muted">
-                Genre rows are available — click <b>Load genre rows</b> above to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
+                <div style={{ marginBottom: 10 }}>
+                  Genre rows are available — click <b>Load genre rows</b> to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
+                </div>
+                <button className="btn secondary" onClick={onLoadGenres} disabled={includeGenres || loadingGenres}>
+                  {includeGenres ? "Genre rows loaded" : loadingGenres ? "Loading genre rows…" : "Load genre rows"}
+                </button>
               </div>
             )}
           </div>
