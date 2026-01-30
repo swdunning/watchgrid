@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "../components/Header";
 import TitleCard from "../components/TitleCard";
@@ -42,6 +42,21 @@ function coerceGenres(payload: any): Genre[] {
     .map((g: any) => ({ id: g.id, name: g.name }));
 }
 
+function isNearRightEdge(el: HTMLDivElement, px = 48) {
+  return el.scrollLeft + el.clientWidth >= el.scrollWidth - px;
+}
+
+function computeRailUi(el: HTMLDivElement | null) {
+  if (!el) return { atStart: true, atEnd: true };
+  // If content doesn't overflow, treat as both-start/end.
+  const noOverflow = el.scrollWidth <= el.clientWidth + 2;
+  if (noOverflow) return { atStart: true, atEnd: true };
+  return {
+    atStart: el.scrollLeft <= 1,
+    atEnd: isNearRightEdge(el)
+  };
+}
+
 export default function ProviderPage() {
   const nav = useNavigate();
   const params = useParams();
@@ -51,7 +66,6 @@ export default function ProviderPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
   const [rateLimited, setRateLimited] = useState(false);
 
   // Controls
@@ -64,11 +78,43 @@ export default function ProviderPage() {
 
   const isSpecificGenre = genreId !== "all";
 
+  // Row paging state
   const rowState = useMemo(() => {
     const map = new Map<string, { page: number; canLoadMore: boolean; genreId?: number; kind: string }>();
     for (const r of rows) map.set(r.key, { page: r.page, canLoadMore: r.canLoadMore, genreId: r.genreId, kind: r.kind });
     return map;
   }, [rows]);
+
+  // Refs + UI state
+  const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [rowUi, setRowUi] = useState<Record<string, { atStart: boolean; atEnd: boolean }>>({});
+  const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
+  const rafIds = useRef<Record<string, number | null>>({});
+
+  const setRailRef = (rowKey: string) => (el: HTMLDivElement | null) => {
+    railRefs.current[rowKey] = el;
+  };
+
+  const setRowUiIfChanged = (rowKey: string, next: { atStart: boolean; atEnd: boolean }) => {
+    setRowUi((prev) => {
+      const cur = prev[rowKey];
+      if (cur && cur.atStart === next.atStart && cur.atEnd === next.atEnd) return prev;
+      return { ...prev, [rowKey]: next };
+    });
+  };
+
+  const updateRailUi = (rowKey: string) => {
+    const el = railRefs.current[rowKey];
+    setRowUiIfChanged(rowKey, computeRailUi(el));
+  };
+
+  const onRailScroll = (rowKey: string) => {
+    if (rafIds.current[rowKey]) return;
+    rafIds.current[rowKey] = requestAnimationFrame(() => {
+      rafIds.current[rowKey] = null;
+      updateRailUi(rowKey);
+    });
+  };
 
   const loadGenres = async () => {
     try {
@@ -94,6 +140,9 @@ export default function ProviderPage() {
       setLabel(data.label || provider);
       setRows(data.rows || []);
       setRateLimited(!!data.rateLimited);
+
+      setRowUi({});
+      setLoadingMore({});
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load provider rows");
       setRows([]);
@@ -113,6 +162,23 @@ export default function ProviderPage() {
     loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, mode, genreId]);
+
+  // After rows render, initialize arrow states & re-check on resize
+  useEffect(() => {
+    const init = () => {
+      for (const r of rows) updateRailUi(r.key);
+    };
+    const t = setTimeout(init, 0);
+
+    const onResize = () => init();
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", onResize);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
   const addToList = async (item: RowItem) => {
     await api("/api/lists/add", {
@@ -137,29 +203,72 @@ export default function ProviderPage() {
     await loadRows();
   };
 
-  const loadMore = async (rowKey: string) => {
+  const loadMoreForRow = async (rowKey: string) => {
     const st = rowState.get(rowKey);
     if (!st || !st.canLoadMore) return;
 
-    const nextPage = st.page + 1;
+    setLoadingMore((prev) => ({ ...prev, [rowKey]: true }));
+    try {
+      const nextPage = st.page + 1;
 
-    const qs = new URLSearchParams();
-    qs.set("kind", st.kind);
-    qs.set("mode", mode);
-    qs.set("page", String(nextPage));
+      const qs = new URLSearchParams();
+      qs.set("kind", st.kind);
+      qs.set("mode", mode);
+      qs.set("page", String(nextPage));
 
-    if (typeof st.genreId === "number") qs.set("genreId", String(st.genreId));
-    if ((st.kind === "genre_tv" || st.kind === "genre_movies") && genreId !== "all") {
-      qs.set("genreId", String(genreId));
+      if (typeof st.genreId === "number") qs.set("genreId", String(st.genreId));
+      if ((st.kind === "genre_tv" || st.kind === "genre_movies") && genreId !== "all") {
+        qs.set("genreId", String(genreId));
+      }
+
+      const data = await api<{ page: number; canLoadMore: boolean; items: RowItem[] }>(
+        `/api/provider/${provider}/browse?${qs.toString()}`
+      );
+
+      setRows((prev) =>
+        prev.map((r) =>
+          r.key !== rowKey
+            ? r
+            : { ...r, page: data.page, canLoadMore: data.canLoadMore, items: [...(r.items || []), ...(data.items || [])] }
+        )
+      );
+
+      // scroll into appended content
+      setTimeout(() => {
+        const el = railRefs.current[rowKey];
+        if (!el) return;
+        const step = Math.floor(el.clientWidth * 0.85);
+        el.scrollBy({ left: step, behavior: "smooth" });
+        setTimeout(() => updateRailUi(rowKey), 200);
+      }, 0);
+    } finally {
+      setLoadingMore((prev) => ({ ...prev, [rowKey]: false }));
+    }
+  };
+
+  const scrollLeft = (rowKey: string) => {
+    const el = railRefs.current[rowKey];
+    if (!el) return;
+    const step = Math.floor(el.clientWidth * 0.85);
+    el.scrollBy({ left: -step, behavior: "smooth" });
+    setTimeout(() => updateRailUi(rowKey), 200);
+  };
+
+  const scrollRight = async (rowKey: string) => {
+    const el = railRefs.current[rowKey];
+    if (!el) return;
+
+    const st = rowState.get(rowKey);
+    const atEnd = isNearRightEdge(el);
+
+    if (atEnd && st?.canLoadMore && !loadingMore[rowKey]) {
+      await loadMoreForRow(rowKey);
+      return;
     }
 
-    const data = await api<{ page: number; canLoadMore: boolean; items: RowItem[] }>(
-      `/api/provider/${provider}/browse?${qs.toString()}`
-    );
-
-    setRows((prev) =>
-      prev.map((r) => (r.key !== rowKey ? r : { ...r, page: data.page, canLoadMore: data.canLoadMore, items: [...(r.items || []), ...(data.items || [])] }))
-    );
+    const step = Math.floor(el.clientWidth * 0.85);
+    el.scrollBy({ left: step, behavior: "smooth" });
+    setTimeout(() => updateRailUi(rowKey), 200);
   };
 
   const onLoadGenres = async () => {
@@ -184,12 +293,74 @@ export default function ProviderPage() {
     </button>
   );
 
+  const ArrowBtn = ({
+    dir,
+    disabled,
+    onClick,
+    ariaLabel
+  }: {
+    dir: "left" | "right";
+    disabled?: boolean;
+    onClick: () => void;
+    ariaLabel: string;
+  }) => {
+    // IMPORTANT: show even when disabled (just dim), so user always sees both arrows.
+    const base: React.CSSProperties = {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      width: 54,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      border: "none",
+      cursor: disabled ? "default" : "pointer",
+      opacity: disabled ? 0.35 : 1,
+      pointerEvents: disabled ? "none" : "auto",
+      transition: "opacity 180ms ease",
+      background:
+  dir === "left"
+    ? "linear-gradient(90deg, rgba(123,47,247,0.35), rgba(0,0,0,0))"
+    : "linear-gradient(270deg, rgba(123,47,247,0.35), rgba(0,0,0,0))"
+
+    };
+
+    const iconBox: React.CSSProperties = {
+      height: 36,
+      width: 36,
+      borderRadius: 999,
+	  background: "rgba(123,47,247,0.55)",	
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 18,
+	  border: "2px solid rgba(230,220,255,0.95)",
+	  color: "rgba(230,220,255,0.95)",
+
+    };
+
+    return (
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={onClick}
+        disabled={disabled}
+        style={{
+          ...base,
+          left: dir === "left" ? 0 : undefined,
+          right: dir === "right" ? 0 : undefined
+        }}
+      >
+        <div style={iconBox}>{dir === "left" ? "‹" : "›"}</div>
+      </button>
+    );
+  };
+
   return (
     <>
       <Header />
 
       <div className="page">
-        {/* Always-visible back button (in case Header doesn't render left props) */}
         <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
           <button className="btn secondary" onClick={() => nav("/app")} style={{ borderRadius: 12 }}>
             ← Back to Home
@@ -218,10 +389,17 @@ export default function ProviderPage() {
 
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
               <div className="muted">Genre</div>
-              <select className="input" style={{ width: 260 }} value={genreId} onChange={(e) => setGenreId(e.target.value)}>
+              <select
+                className="input"
+                style={{ width: 260 }}
+                value={genreId}
+                onChange={(e) => setGenreId(e.target.value)}
+              >
                 <option value="all">All genres</option>
-                {(Array.isArray(genres) ? genres : []).map((g) => (
-                  <option key={g.id} value={String(g.id)}>{g.name}</option>
+                {genres.map((g) => (
+                  <option key={g.id} value={String(g.id)}>
+                    {g.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -231,11 +409,16 @@ export default function ProviderPage() {
         </div>
 
         {loading ? (
-          <div className="card muted" style={{ marginTop: 14 }}>Loading rows…</div>
+          <div className="card muted" style={{ marginTop: 14 }}>
+            Loading rows…
+          </div>
         ) : (
           <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
             {rows.map((row) => {
               const isMyList = row.kind === "my_list";
+              const ui = rowUi[row.key] || { atStart: true, atEnd: false };
+              const canLoadMore = row.canLoadMore && !isMyList;
+
               return (
                 <div key={row.key} className="card">
                   <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
@@ -245,36 +428,96 @@ export default function ProviderPage() {
                     </div>
                   </div>
 
-                  <div className="rail" style={{ marginTop: 12 }}>
-                    {(row.items || []).map((it) => (
-                      <TitleCard
-                        key={`${row.key}-${it.watchmodeTitleId}`}
-                        item={it}
-                        action={
-                          isMyList ? (
-                            <button className="btn secondary" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => removeFromList(it.watchmodeTitleId)}>
-                              Remove
-                            </button>
-                          ) : (
-                            <button className="btn" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => addToList(it)}>
-                              + Add
-                            </button>
-                          )
-                        }
-                      />
-                    ))}
+                  {/* ✅ FIX: clamp the rail to the card width so it never grows the page */}
+                  <div
+                    style={{
+                      position: "relative",
+                      marginTop: 12,
+                      width: "100%",
+                      maxWidth: "100%",
+                      minWidth: 0,
+                      overflow: "hidden" // critical: prevents whole-page horizontal growth
+                    }}
+                  >
+                    <ArrowBtn dir="left" ariaLabel="Scroll left" disabled={ui.atStart} onClick={() => scrollLeft(row.key)} />
+
+                    <div
+                      ref={setRailRef(row.key)}
+                      onScroll={() => onRailScroll(row.key)}
+                      style={{
+                        width: "100%",
+                        maxWidth: "100%",
+                        minWidth: 0,
+                        overflowX: "auto",
+                        overflowY: "hidden",
+                        padding: "6px 56px", // space for arrows
+                        WebkitOverflowScrolling: "touch"
+                      }}
+                    >
+                      {/* ✅ FIX: use flex (not inline-flex + nowrap) */}
+                      <div style={{ display: "flex", gap: 12, alignItems: "stretch", width: "max-content" }}>
+                        {(row.items || []).map((it) => (
+                          <TitleCard
+                            key={`${row.key}-${it.watchmodeTitleId}`}
+                            item={it}
+                            action={
+                              isMyList ? (
+                                <button
+                                  className="btn secondary"
+                                  style={{ padding: "8px 10px", borderRadius: 10 }}
+                                  onClick={() => removeFromList(it.watchmodeTitleId)}
+                                >
+                                  Remove
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn"
+                                  style={{ padding: "8px 10px", borderRadius: 10 }}
+                                  onClick={() => addToList(it)}
+                                >
+                                  + Add
+                                </button>
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <ArrowBtn
+                      dir="right"
+                      ariaLabel="Scroll right"
+                      disabled={(!canLoadMore && ui.atEnd) || !!loadingMore[row.key]}
+                      onClick={() => scrollRight(row.key)}
+                    />
+
+                    {!!loadingMore[row.key] && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          right: 64,
+                          top: 10,
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          background: "rgba(20,20,28,0.85)",
+                          border: "1px solid rgba(255,255,255,0.12)"
+                        }}
+                        className="muted"
+                      >
+                        Loading…
+                      </div>
+                    )}
                   </div>
 
-                  {row.canLoadMore && row.kind !== "my_list" && (
-                    <div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
-                      <button className="btn secondary" onClick={() => loadMore(row.key)}>Load more</button>
+                  {canLoadMore && ui.atEnd && !loadingMore[row.key] && (
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      Tip: press the right arrow again to load more.
                     </div>
                   )}
                 </div>
               );
             })}
 
-            {/* Bottom helper + button (requested) */}
             {!isSpecificGenre && !includeGenres && (
               <div className="card muted">
                 <div style={{ marginBottom: 10 }}>

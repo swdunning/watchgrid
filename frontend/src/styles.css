@@ -13,6 +13,34 @@
 * {
 	box-sizing: border-box
 }
+/* Prevent whole-page horizontal scrolling */
+html,
+body {
+	width: 100%;
+	max-width: 100%;
+	overflow-x: hidden;
+}
+
+/* Make sure flex children can shrink (critical for rails inside cards) */
+.page,
+.card {
+	max-width: 100%;
+	min-width: 0;
+}
+
+/* If you have a main wrapper (common in your app), clamp it too */
+#root {
+	width: 100%;
+	max-width: 100%;
+	overflow-x: hidden;
+}
+
+/* Box sizing prevents padding from creating overflow */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
 
 html,
 body {

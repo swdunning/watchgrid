@@ -107,21 +107,30 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 	const genreId = genreIdRaw === "all" ? null : Number(genreIdRaw)
 	const includeGenres = asBool(req.query.includeGenres)
 
-	// ✅ User-specific rows payload cache (10 minutes)
-	const payloadCacheKey = `rows:${userId}:${provider}:${mode}:g=${genreIdRaw}:ig=${includeGenres ? "1" : "0"}`
+	const hasProvider = await prisma.userProvider.findFirst({
+		where: { userId, provider: { equals: provider, mode: "insensitive" } },
+	})
+	if (!hasProvider) return res.status(403).json({ error: "Not authorized" })
+
+	// ✅ List signature — bust cache whenever user's list for this provider changes
+	const agg = await prisma.savedItem.aggregate({
+		where: { userId, provider: { equals: provider, mode: "insensitive" } },
+		_count: { _all: true },
+		_max: { createdAt: true },
+	})
+
+	const maxTs = agg._max.createdAt ? String(agg._max.createdAt.getTime()) : "0"
+	const listSig = `${agg._count._all}:${maxTs}`
+
+	// ✅ Provider rows payload cache (10 minutes) — keyed by listSig so My List stays fresh
+	const payloadCacheKey = `rows:${userId}:${provider}:${mode}:g=${genreIdRaw}:ig=${includeGenres ? "1" : "0"}:ls=${listSig}`
 	const cached = await cacheGet<any>(payloadCacheKey)
 	if (cached) {
-		// refresh rateLimited flag dynamically
 		return res.json({
 			...cached,
 			rateLimited: watchmodeWasRateLimitedRecently(),
 		})
 	}
-
-	const hasProvider = await prisma.userProvider.findFirst({
-		where: { userId, provider: { equals: provider, mode: "insensitive" } },
-	})
-	if (!hasProvider) return res.status(403).json({ error: "Not authorized" })
 
 	const saved = await prisma.savedItem.findMany({
 		where: { userId, provider: { equals: provider, mode: "insensitive" } },
