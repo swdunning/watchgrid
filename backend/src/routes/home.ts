@@ -76,19 +76,27 @@ router.get("/home", requireAuth, async (req, res) => {
 	const userProviders = await prisma.userProvider.findMany({ where: { userId } })
 	const providers = userProviders.map((p) => normalizeProviderKey(p.provider)).filter(Boolean) as ProviderKey[]
 
-	// saved items (all providers) — single DB query
 	const saved = await prisma.savedItem.findMany({
 		where: { userId },
 		orderBy: { createdAt: "desc" },
 	})
 
-	// pre-build rows
+	// Master row = all saved items across providers
+	const masterSavedItems: RowItem[] = saved.map((it) => ({
+		watchmodeTitleId: it.watchmodeTitleId,
+		title: it.title,
+		type: it.type,
+		poster: it.poster ?? null,
+		watchUrl: it.watchUrl ?? null,
+		provider: normalizeProviderKey(it.provider) ?? it.provider,
+	}))
+
+	// Per-provider rows
 	const rows: Record<string, HomeRow> = {}
 	for (const p of providers) {
 		rows[p] = { provider: p, label: labelFor(p), savedItems: [], popularItems: [] }
 	}
 
-	// attach saved items
 	for (const it of saved) {
 		const p = normalizeProviderKey(it.provider)
 		if (p && rows[p]) {
@@ -103,7 +111,7 @@ router.get("/home", requireAuth, async (req, res) => {
 		}
 	}
 
-	// preload popular rows (cached; concurrency limited)
+	// preload popular for each provider (cached; concurrency limited)
 	await asyncPool(2, providers, async (p) => {
 		rows[p].popularItems = await getPopularForProvider(p)
 	})
@@ -111,6 +119,7 @@ router.get("/home", requireAuth, async (req, res) => {
 	res.json({
 		providers,
 		rateLimited: watchmodeWasRateLimitedRecently(),
+		masterSavedItems,
 		rows: Object.values(rows),
 	})
 })

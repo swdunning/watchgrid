@@ -22,7 +22,9 @@ type HomeRow = {
 
 export default function Home() {
   const nav = useNavigate();
+
   const [rows, setRows] = useState<HomeRow[]>([]);
+  const [masterSavedItems, setMasterSavedItems] = useState<RowItem[]>([]);
   const [rateLimited, setRateLimited] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loadingHome, setLoadingHome] = useState(true);
@@ -31,8 +33,9 @@ export default function Home() {
     setLoadingHome(true);
     setErr(null);
     try {
-      const data = await api<{ rows: HomeRow[]; rateLimited?: boolean }>("/api/home");
+      const data = await api<{ rows: HomeRow[]; masterSavedItems?: RowItem[]; rateLimited?: boolean }>("/api/home");
       setRows(data.rows || []);
+      setMasterSavedItems(data.masterSavedItems || []);
       setRateLimited(!!data.rateLimited);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load home");
@@ -69,9 +72,7 @@ export default function Home() {
       <div className="page">
         <div className="card">
           <h1 style={{ marginTop: 0 }}>Your WatchGrid</h1>
-          <p className="muted">
-            Your lists plus popular picks for each service you selected.
-          </p>
+          <p className="muted">Your lists by service — and popular picks to help you start.</p>
 
           {rateLimited && (
             <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
@@ -87,33 +88,55 @@ export default function Home() {
           {loadingHome ? (
             <div className="card muted">Loading your rows…</div>
           ) : (
-            rows.map((row) => (
-              <div key={row.provider} style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-                <ProviderRow
-                  title={`My List • ${row.label}`}
-                  items={(row.savedItems || []).map((x: any) => ({
-                    watchmodeTitleId: x.watchmodeTitleId,
-                    title: x.title,
-                    type: x.type,
-                    poster: x.poster ?? null,
-                    watchUrl: x.watchUrl ?? null
-                  }))}
-                  onSeeAll={() => nav(`/app/provider/${row.provider}`)}
-                />
+            <>
+              {masterSavedItems.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <ProviderRow
+                    title="All My Lists"
+                    items={masterSavedItems.map((x: any) => ({
+                      watchmodeTitleId: x.watchmodeTitleId,
+                      title: x.title,
+                      type: x.type,
+                      poster: x.poster ?? null,
+                      watchUrl: x.watchUrl ?? null
+                    }))}
+                    onSeeAll={() => nav(`/app`)}
+                  />
+                </div>
+              )}
 
-                <ProviderRow
-                  title={`Popular on ${row.label}`}
-                  items={(row.popularItems || []).map((x: any) => ({
-                    watchmodeTitleId: x.watchmodeTitleId,
-                    title: x.title,
-                    type: x.type,
-                    poster: x.poster ?? null,
-                    watchUrl: x.watchUrl ?? null
-                  }))}
-                  onSeeAll={() => nav(`/app/provider/${row.provider}`)}
-                />
-              </div>
-            ))
+              {rows.map((row) => {
+                const hasSaved = (row.savedItems?.length ?? 0) > 0;
+                const items = hasSaved ? row.savedItems : row.popularItems;
+
+                const title = hasSaved ? `My List – ${row.label}` : `Popular on ${row.label}`;
+                const hint = hasSaved ? "" : "Click to add items to your list";
+
+                return (
+                  <div key={row.provider} style={{ marginBottom: 16 }}>
+                    {!hasSaved && (
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+                        <span className="muted" style={{ fontSize: 13 }}>{hint}</span>
+                      </div>
+                    )}
+
+                    <div style={{ opacity: hasSaved ? 1 : 0.86 }}>
+                      <ProviderRow
+                        title={title}
+                        items={(items || []).map((x: any) => ({
+                          watchmodeTitleId: x.watchmodeTitleId,
+                          title: x.title,
+                          type: x.type,
+                          poster: x.poster ?? null,
+                          watchUrl: x.watchUrl ?? null
+                        }))}
+                        onSeeAll={() => nav(`/app/provider/${row.provider}`)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </div>
