@@ -1,5 +1,5 @@
 import "dotenv/config"
-
+import accountRoutes from "./routes/account"
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser"
@@ -19,6 +19,7 @@ app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
 app.use("/api", providerRowsRoutes)
+app.use("/api", accountRoutes)
 
 app.get("/health", (_req, res) => res.json({ ok: true }))
 
