@@ -1,77 +1,63 @@
-import TitleCard, { type TitleItem } from "./TitleCard";
+import TitleCard from "./TitleCard";
+
+type RowItem = {
+  watchmodeTitleId: number;
+  title: string;
+  type: string;
+  poster: string | null;
+  watchUrl?: string | null;
+};
 
 export default function ProviderRow({
   title,
   logoUrl,
   items,
   onSeeAll,
-  onRemove
+  onRemove,
+  variant = "list"
 }: {
   title: string;
   logoUrl?: string | null;
-  items: TitleItem[];
-  onSeeAll: () => void;
-  onRemove?: (watchmodeTitleId: number) => void;
+  items: RowItem[];
+  onSeeAll?: () => void;
+  onRemove?: (id: number) => void;
+  variant?: "list" | "suggested";
 }) {
   return (
-    <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "18px 0 10px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt=""
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                objectFit: "contain",
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.10)",
-                padding: 4
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.10)"
-              }}
-            />
-          )}
-
-          <h2 style={{ margin: 0 }}>{title}</h2>
+    <div className={`wgRow ${variant === "suggested" ? "wgRowSuggested" : ""}`}>
+      <div className="wgRowHeader">
+        <div className="wgRowTitleWrap">
+          {logoUrl ? <img className="wgRowLogo" src={logoUrl} alt="" /> : null}
+          <div className="wgRowTitle">{title}</div>
         </div>
 
-        <button className="btn secondary" onClick={onSeeAll}>See all</button>
+        {onSeeAll ? (
+          <button className="wgPillBtn" onClick={onSeeAll}>
+  See all
+</button>
+
+        ) : null}
       </div>
 
-      {items.length ? (
-        <div className="rail">
-          {items.map((it) => (
-            <TitleCard
-              key={it.watchmodeTitleId}
-              item={it}
-              action={
-                onRemove ? (
-                  <button
-                    className="btn secondary"
-                    style={{ padding: "8px 10px", borderRadius: 10 }}
-                    onClick={() => onRemove(it.watchmodeTitleId)}
-                  >
-                    Remove
-                  </button>
-                ) : undefined
-              }
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="card muted">Nothing here yet.</div>
-      )}
+      <div className="rail">
+        {(items || []).map((it) => (
+          <TitleCard
+            key={it.watchmodeTitleId}
+            item={it}
+            action={
+              onRemove ? (
+                <button
+                  className="btn secondary"
+                  style={{ padding: "8px 10px", borderRadius: 10 }}
+                  onClick={() => onRemove(it.watchmodeTitleId)}
+                >
+                  Remove
+                </button>
+              ) : undefined
+            }
+          />
+        ))}
+      </div>
     </div>
   );
 }

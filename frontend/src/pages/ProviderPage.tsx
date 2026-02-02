@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "../components/Header";
 import TitleCard from "../components/TitleCard";
@@ -13,172 +13,151 @@ type RowItem = {
   provider?: string;
 };
 
-type Row = {
-  key: string;
-  kind: string;
-  title: string;
-  items: RowItem[];
-  page: number;
-  canLoadMore: boolean;
-  genreId?: number;
-};
-
-type ProviderRowsResponse = {
+type ProviderRowPayload = {
   provider: string;
   label: string;
   mode: "all" | "shows" | "movies";
   genreId: number | null;
-  includeGenres?: boolean;
+  includeGenres: boolean;
   rateLimited?: boolean;
-  rows: Row[];
+  rows: Array<{
+    key: string;
+    kind: string; // e.g. "my_list", "popular_tv", etc
+    title: string;
+    page: number;
+    canLoadMore: boolean;
+    genreId?: number | null;
+    items: RowItem[];
+  }>;
 };
 
+type ProviderMeta = { provider: string; label: string; logoUrl: string | null };
 type Genre = { id: number; name: string };
-
-function coerceGenres(payload: any): Genre[] {
-  const arr = Array.isArray(payload) ? payload : Array.isArray(payload?.genres) ? payload.genres : [];
-  return arr
-    .filter((g: any) => g && typeof g.id === "number" && typeof g.name === "string")
-    .map((g: any) => ({ id: g.id, name: g.name }));
-}
-
-function isNearRightEdge(el: HTMLDivElement, px = 48) {
-  return el.scrollLeft + el.clientWidth >= el.scrollWidth - px;
-}
-
-function computeRailUi(el: HTMLDivElement | null) {
-  if (!el) return { atStart: true, atEnd: true };
-  // If content doesn't overflow, treat as both-start/end.
-  const noOverflow = el.scrollWidth <= el.clientWidth + 2;
-  if (noOverflow) return { atStart: true, atEnd: true };
-  return {
-    atStart: el.scrollLeft <= 1,
-    atEnd: isNearRightEdge(el)
-  };
-}
 
 export default function ProviderPage() {
   const nav = useNavigate();
-  const params = useParams();
-  const provider = String(params.provider || "").toUpperCase();
+  const { provider: providerParam } = useParams();
+  const provider = String(providerParam || "").toUpperCase();
 
-  const [label, setLabel] = useState(provider);
-  const [rows, setRows] = useState<Row[]>([]);
+  const [meta, setMeta] = useState<ProviderMeta | null>(null);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
 
-  // Controls
+  // Mode / genre filters
   const [mode, setMode] = useState<"all" | "shows" | "movies">("all");
-  const [genres, setGenres] = useState<Genre[]>([]);
   const [genreId, setGenreId] = useState<string>("all");
 
-  const [includeGenres, setIncludeGenres] = useState(false);
-  const [loadingGenres, setLoadingGenres] = useState(false);
+  // Rows payload
+  const [payload, setPayload] = useState<ProviderRowPayload | null>(null);
 
-  const isSpecificGenre = genreId !== "all";
+  // Search
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<RowItem[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [loadingSearch, setLoadingSearch] = useState(false);
 
-  // Row paging state
-  const rowState = useMemo(() => {
-    const map = new Map<string, { page: number; canLoadMore: boolean; genreId?: number; kind: string }>();
-    for (const r of rows) map.set(r.key, { page: r.page, canLoadMore: r.canLoadMore, genreId: r.genreId, kind: r.kind });
-    return map;
-  }, [rows]);
-
-  // Refs + UI state
-  const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const [rowUi, setRowUi] = useState<Record<string, { atStart: boolean; atEnd: boolean }>>({});
+  // Per-row loading states for Load More
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
-  const rafIds = useRef<Record<string, number | null>>({});
 
-  const setRailRef = (rowKey: string) => (el: HTMLDivElement | null) => {
-    railRefs.current[rowKey] = el;
-  };
+  const selectedGenreNum = useMemo(() => (genreId === "all" ? null : Number(genreId)), [genreId]);
 
-  const setRowUiIfChanged = (rowKey: string, next: { atStart: boolean; atEnd: boolean }) => {
-    setRowUi((prev) => {
-      const cur = prev[rowKey];
-      if (cur && cur.atStart === next.atStart && cur.atEnd === next.atEnd) return prev;
-      return { ...prev, [rowKey]: next };
-    });
-  };
-
-  const updateRailUi = (rowKey: string) => {
-    const el = railRefs.current[rowKey];
-    setRowUiIfChanged(rowKey, computeRailUi(el));
-  };
-
-  const onRailScroll = (rowKey: string) => {
-    if (rafIds.current[rowKey]) return;
-    rafIds.current[rowKey] = requestAnimationFrame(() => {
-      rafIds.current[rowKey] = null;
-      updateRailUi(rowKey);
-    });
+  const loadMeta = async () => {
+    try {
+      const data = await api<{ providers: ProviderMeta[] }>("/api/meta/providers");
+      const found = (data.providers || []).find((p) => String(p.provider).toUpperCase() === provider) || null;
+      setMeta(found);
+    } catch {
+      // ignore
+    }
   };
 
   const loadGenres = async () => {
     try {
-      const payload = await api<any>("/api/genres");
-      setGenres(coerceGenres(payload));
+      const data = await api<{ genres: Genre[] }>("/api/genres");
+      setGenres(Array.isArray(data.genres) ? data.genres : []);
     } catch {
       setGenres([]);
     }
   };
 
-  const loadRows = async (opts?: { forceIncludeGenres?: boolean }) => {
+  const loadRows = async (includeGenres: boolean) => {
     setLoading(true);
     setErr(null);
     try {
-      const qs = new URLSearchParams();
-      qs.set("mode", mode);
-      qs.set("genreId", genreId);
+      const url =
+        `/api/provider/${encodeURIComponent(provider)}/rows` +
+        `?mode=${mode}` +
+        `&genreId=${encodeURIComponent(genreId)}` +
+        `&includeGenres=${includeGenres ? "1" : "0"}`;
 
-      const wantGenres = (opts?.forceIncludeGenres ?? includeGenres) && !isSpecificGenre;
-      if (wantGenres) qs.set("includeGenres", "1");
-
-      const data = await api<ProviderRowsResponse>(`/api/provider/${provider}/rows?${qs.toString()}`);
-      setLabel(data.label || provider);
-      setRows(data.rows || []);
+      const data = await api<ProviderRowPayload>(url);
+      setPayload(data);
       setRateLimited(!!data.rateLimited);
-
-      setRowUi({});
-      setLoadingMore({});
     } catch (e: any) {
-      setErr(e?.message ?? "Failed to load provider rows");
-      setRows([]);
-      setRateLimited(false);
+      setErr(e?.message ?? "Failed to load provider page");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    loadMeta();
     loadGenres();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
-    if (isSpecificGenre) setIncludeGenres(false);
-    loadRows();
+    loadRows(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, mode, genreId]);
 
-  // After rows render, initialize arrow states & re-check on resize
+  // Clear search results when query cleared
   useEffect(() => {
-    const init = () => {
-      for (const r of rows) updateRailUi(r.key);
-    };
-    const t = setTimeout(init, 0);
+    if (q.trim() === "") setResults([]);
+  }, [q]);
 
-    const onResize = () => init();
-    window.addEventListener("resize", onResize);
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setQ("");
+    setResults([]);
+    setErr(null);
+  };
 
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("resize", onResize);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows]);
+  const runSearch = async () => {
+    const term = q.trim();
+    if (!term) {
+      setResults([]);
+      setSearchOpen(false);
+      return;
+    }
+
+    setLoadingSearch(true);
+    setErr(null);
+    setResults([]);
+
+    try {
+      const data = await api<any[]>(
+        `/api/search?q=${encodeURIComponent(term)}&provider=${encodeURIComponent(provider)}`
+      );
+
+      setResults(
+        (data || []).map((r: any) => ({
+          watchmodeTitleId: r.watchmodeTitleId,
+          title: r.title,
+          type: r.type,
+          poster: r.poster ?? null,
+          watchUrl: r.watchUrl ?? null,
+          provider
+        }))
+      );
+    } catch (e: any) {
+      setErr(e?.message ?? "Search failed");
+    } finally {
+      setLoadingSearch(false);
+    }
+  };
 
   const addToList = async (item: RowItem) => {
     await api("/api/lists/add", {
@@ -189,10 +168,10 @@ export default function ProviderPage() {
         title: item.title,
         type: item.type,
         poster: item.poster,
-        watchUrl: item.watchUrl ?? null
+        watchUrl: item.watchUrl
       })
     });
-    await loadRows();
+    await loadRows(payload?.includeGenres ?? false);
   };
 
   const removeFromList = async (watchmodeTitleId: number) => {
@@ -200,334 +179,251 @@ export default function ProviderPage() {
       method: "POST",
       body: JSON.stringify({ provider, watchmodeTitleId })
     });
-    await loadRows();
+    await loadRows(payload?.includeGenres ?? false);
+  };
+
+  const loadGenreRows = async () => {
+    await loadRows(true);
   };
 
   const loadMoreForRow = async (rowKey: string) => {
-    const st = rowState.get(rowKey);
-    if (!st || !st.canLoadMore) return;
+    if (!payload) return;
+    const row = payload.rows.find((r) => r.key === rowKey);
+    if (!row) return;
+    if (!row.canLoadMore) return;
 
     setLoadingMore((prev) => ({ ...prev, [rowKey]: true }));
+    setErr(null);
+
     try {
-      const nextPage = st.page + 1;
+      const nextPage = (row.page ?? 1) + 1;
 
-      const qs = new URLSearchParams();
-      qs.set("kind", st.kind);
-      qs.set("mode", mode);
-      qs.set("page", String(nextPage));
+      const url =
+        `/api/provider/${encodeURIComponent(provider)}/browse` +
+        `?kind=${encodeURIComponent(row.kind)}` +
+        `&mode=${encodeURIComponent(payload.mode)}` +
+        `&page=${encodeURIComponent(String(nextPage))}` +
+        (row.genreId ? `&genreId=${encodeURIComponent(String(row.genreId))}` : "");
 
-      if (typeof st.genreId === "number") qs.set("genreId", String(st.genreId));
-      if ((st.kind === "genre_tv" || st.kind === "genre_movies") && genreId !== "all") {
-        qs.set("genreId", String(genreId));
-      }
+      const more = await api<{ page: number; canLoadMore: boolean; items: RowItem[] }>(url);
 
-      const data = await api<{ page: number; canLoadMore: boolean; items: RowItem[] }>(
-        `/api/provider/${provider}/browse?${qs.toString()}`
-      );
-
-      setRows((prev) =>
-        prev.map((r) =>
-          r.key !== rowKey
-            ? r
-            : { ...r, page: data.page, canLoadMore: data.canLoadMore, items: [...(r.items || []), ...(data.items || [])] }
-        )
-      );
-
-      // scroll into appended content
-      setTimeout(() => {
-        const el = railRefs.current[rowKey];
-        if (!el) return;
-        const step = Math.floor(el.clientWidth * 0.85);
-        el.scrollBy({ left: step, behavior: "smooth" });
-        setTimeout(() => updateRailUi(rowKey), 200);
-      }, 0);
+      setPayload((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          rows: prev.rows.map((r) => {
+            if (r.key !== rowKey) return r;
+            return {
+              ...r,
+              page: more.page,
+              canLoadMore: more.canLoadMore,
+              items: [...(r.items || []), ...(more.items || [])]
+            };
+          })
+        };
+      });
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to load more");
     } finally {
       setLoadingMore((prev) => ({ ...prev, [rowKey]: false }));
     }
   };
 
-  const scrollLeft = (rowKey: string) => {
-    const el = railRefs.current[rowKey];
-    if (!el) return;
-    const step = Math.floor(el.clientWidth * 0.85);
-    el.scrollBy({ left: -step, behavior: "smooth" });
-    setTimeout(() => updateRailUi(rowKey), 200);
-  };
-
-  const scrollRight = async (rowKey: string) => {
-    const el = railRefs.current[rowKey];
-    if (!el) return;
-
-    const st = rowState.get(rowKey);
-    const atEnd = isNearRightEdge(el);
-
-    if (atEnd && st?.canLoadMore && !loadingMore[rowKey]) {
-      await loadMoreForRow(rowKey);
-      return;
-    }
-
-    const step = Math.floor(el.clientWidth * 0.85);
-    el.scrollBy({ left: step, behavior: "smooth" });
-    setTimeout(() => updateRailUi(rowKey), 200);
-  };
-
-  const onLoadGenres = async () => {
-    if (isSpecificGenre) return;
-    setLoadingGenres(true);
-    try {
-      setIncludeGenres(true);
-      await loadRows({ forceIncludeGenres: true });
-    } finally {
-      setLoadingGenres(false);
-    }
-  };
-
-  const ToggleBtn = ({ value, text }: { value: "all" | "shows" | "movies"; text: string }) => (
-    <button
-      className={`btn ${mode === value ? "" : "secondary"}`}
-      onClick={() => setMode(value)}
-      style={{ borderRadius: 999, padding: "8px 12px" }}
-      type="button"
-    >
-      {text}
-    </button>
-  );
-
-  const ArrowBtn = ({
-    dir,
-    disabled,
-    onClick,
-    ariaLabel
-  }: {
-    dir: "left" | "right";
-    disabled?: boolean;
-    onClick: () => void;
-    ariaLabel: string;
-  }) => {
-    // IMPORTANT: show even when disabled (just dim), so user always sees both arrows.
-    const base: React.CSSProperties = {
-      position: "absolute",
-      top: 0,
-      bottom: 0,
-      width: 54,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      border: "none",
-      cursor: disabled ? "default" : "pointer",
-      opacity: disabled ? 0.35 : 1,
-      pointerEvents: disabled ? "none" : "auto",
-      transition: "opacity 180ms ease",
-      background:
-  dir === "left"
-    ? "linear-gradient(90deg, rgba(123,47,247,0.35), rgba(0,0,0,0))"
-    : "linear-gradient(270deg, rgba(123,47,247,0.35), rgba(0,0,0,0))"
-
-    };
-
-    const iconBox: React.CSSProperties = {
-      height: 36,
-      width: 36,
-      borderRadius: 999,
-	  background: "rgba(123,47,247,0.55)",	
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 18,
-	  border: "2px solid rgba(230,220,255,0.95)",
-	  color: "rgba(230,220,255,0.95)",
-
-    };
-
-    return (
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        onClick={onClick}
-        disabled={disabled}
-        style={{
-          ...base,
-          left: dir === "left" ? 0 : undefined,
-          right: dir === "right" ? 0 : undefined
-        }}
-      >
-        <div style={iconBox}>{dir === "left" ? "‹" : "›"}</div>
-      </button>
-    );
-  };
+  const label = meta?.label || payload?.label || provider;
 
   return (
     <>
-      <Header />
+      <Header
+        right={
+          <div style={{ display: "flex", gap: 10 }}>
+            <button className="btn secondary" onClick={() => nav("/app")}>
+              ← Home
+            </button>
+          </div>
+        }
+      />
 
-      <div className="page">
-        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          <button className="btn secondary" onClick={() => nav("/app")} style={{ borderRadius: 12 }}>
-            ← Back to Home
-          </button>
-        </div>
-
+      <div className="page" style={{ display: "grid", gap: 14 }}>
         <div className="card">
-          <h1 style={{ marginTop: 0 }}>{label}</h1>
-          <p className="muted" style={{ marginTop: 6 }}>
-            Browse curated rows for this service, or filter by TV/Movies and genre.
-          </p>
-
-          {rateLimited && (
-            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
-              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode.</div>
-              <div className="muted" style={{ marginTop: 4 }}>Try again in a few minutes.</div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {meta?.logoUrl ? (
+              <img src={meta.logoUrl} alt="" style={{ width: 42, height: 42, borderRadius: 10 }} />
+            ) : null}
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ margin: 0 }}>{label}</h1>
+              <div className="muted">Browse and build your {label} list.</div>
             </div>
-          )}
+          </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14, alignItems: "center" }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <ToggleBtn value="all" text="TV Shows & Movies" />
-              <ToggleBtn value="shows" text="TV Shows" />
-              <ToggleBtn value="movies" text="Movies" />
-            </div>
+          {/* Provider-scoped search */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+            <input
+              className="input"
+              style={{ maxWidth: 560 }}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onFocus={() => setSearchOpen(true)}
+              placeholder={`Search ${label}…`}
+              onKeyDown={(e) => (e.key === "Enter" ? runSearch() : null)}
+            />
+            <button className="btn" onClick={runSearch} disabled={loadingSearch}>
+              {loadingSearch ? "Searching…" : "Search"}
+            </button>
+          </div>
 
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-              <div className="muted">Genre</div>
-              <select
-                className="input"
-                style={{ width: 260 }}
-                value={genreId}
-                onChange={(e) => setGenreId(e.target.value)}
-              >
-                <option value="all">All genres</option>
-                {genres.map((g) => (
+          {/* Mode buttons */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+            <button className={`btn ${mode === "all" ? "" : "secondary"}`} onClick={() => setMode("all")}>
+              TV Shows & Movies
+            </button>
+            <button className={`btn ${mode === "shows" ? "" : "secondary"}`} onClick={() => setMode("shows")}>
+              TV Shows
+            </button>
+            <button className={`btn ${mode === "movies" ? "" : "secondary"}`} onClick={() => setMode("movies")}>
+              Movies
+            </button>
+          </div>
+
+          {/* Genre selector */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
+            <div className="muted">Genre:</div>
+            <select
+              className="input"
+              style={{ maxWidth: 320 }}
+              value={genreId}
+              onChange={(e) => setGenreId(e.target.value)}
+            >
+              <option value="all">All</option>
+              {Array.isArray(genres) &&
+                genres.map((g) => (
                   <option key={g.id} value={String(g.id)}>
                     {g.name}
                   </option>
                 ))}
-              </select>
-            </div>
+            </select>
+
+            <button className="btn secondary" onClick={loadGenreRows}>
+              Load genre rows
+            </button>
           </div>
+
+          {rateLimited && (
+            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
+              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>
+                We’re temporarily rate-limited by Watchmode. Try again in a few minutes.
+              </div>
+            </div>
+          )}
 
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
+
+          {/* Search rail */}
+          <div className={`searchPanel ${searchOpen ? "open" : ""}`}>
+            <div className="searchPanelHeader">
+              <div className="searchPanelTitle">
+                <h2 style={{ margin: 0 }}>Search</h2>
+                <div className="muted">{q.trim() ? `Results for “${q.trim()}”` : "Type to search…"}</div>
+              </div>
+
+              <button className="searchCloseBtn" onClick={closeSearch} aria-label="Close search">
+                ✕
+              </button>
+            </div>
+
+            {!!results.length ? (
+              <div className="rail">
+                {results.map((r) => (
+                  <TitleCard
+                    key={`${provider}-${r.watchmodeTitleId}`}
+                    item={r}
+                    action={
+                      <button className="btn" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => addToList(r)}>
+                        + Add
+                      </button>
+                    }
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="card muted">
+                {q.trim() ? `No results found on ${label}.` : "Start typing a title, then press Enter."}
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Rows */}
         {loading ? (
-          <div className="card muted" style={{ marginTop: 14 }}>
-            Loading rows…
-          </div>
+          <div className="card muted">Loading…</div>
         ) : (
-          <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
-            {rows.map((row) => {
+          <div style={{ display: "grid", gap: 14 }}>
+            {(payload?.rows || []).map((row) => {
               const isMyList = row.kind === "my_list";
-              const ui = rowUi[row.key] || { atStart: true, atEnd: false };
-              const canLoadMore = row.canLoadMore && !isMyList;
+              const canLoadMore = !!row.canLoadMore;
+              const isLoadingMore = !!loadingMore[row.key];
 
               return (
-                <div key={row.key} className="card">
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-                    <h2 style={{ margin: 0 }}>{row.title}</h2>
-                    <div className="muted" style={{ marginLeft: "auto" }}>
-                      {row.items?.length ? `${row.items.length} items` : "No items"}
+                <div key={row.key} className="wgRow" style={{ maxWidth: "100%", minWidth: 0 }}>
+                  <div className="wgRowHeader">
+                    <div className="wgRowTitleWrap">
+                      <div className="wgRowTitle">{row.title}</div>
                     </div>
+
+                    {!isMyList && canLoadMore ? (
+                    <button
+  className="wgPillBtn"
+  onClick={() => loadMoreForRow(row.key)}
+  disabled={isLoadingMore}
+>
+  {isLoadingMore ? "Loading…" : "→ Load more"}
+</button>
+
+
+                    ) : null}
                   </div>
 
-                  {/* ✅ FIX: clamp the rail to the card width so it never grows the page */}
-                  <div
-                    style={{
-                      position: "relative",
-                      marginTop: 12,
-                      width: "100%",
-                      maxWidth: "100%",
-                      minWidth: 0,
-                      overflow: "hidden" // critical: prevents whole-page horizontal growth
-                    }}
-                  >
-                    <ArrowBtn dir="left" ariaLabel="Scroll left" disabled={ui.atStart} onClick={() => scrollLeft(row.key)} />
-
-                    <div
-                      ref={setRailRef(row.key)}
-                      onScroll={() => onRailScroll(row.key)}
-                      style={{
-                        width: "100%",
-                        maxWidth: "100%",
-                        minWidth: 0,
-                        overflowX: "auto",
-                        overflowY: "hidden",
-                        padding: "6px 56px", // space for arrows
-                        WebkitOverflowScrolling: "touch"
-                      }}
-                    >
-                      {/* ✅ FIX: use flex (not inline-flex + nowrap) */}
-                      <div style={{ display: "flex", gap: 12, alignItems: "stretch", width: "max-content" }}>
-                        {(row.items || []).map((it) => (
-                          <TitleCard
-                            key={`${row.key}-${it.watchmodeTitleId}`}
-                            item={it}
-                            action={
-                              isMyList ? (
-                                <button
-                                  className="btn secondary"
-                                  style={{ padding: "8px 10px", borderRadius: 10 }}
-                                  onClick={() => removeFromList(it.watchmodeTitleId)}
-                                >
-                                  Remove
-                                </button>
-                              ) : (
-                                <button
-                                  className="btn"
-                                  style={{ padding: "8px 10px", borderRadius: 10 }}
-                                  onClick={() => addToList(it)}
-                                >
-                                  + Add
-                                </button>
-                              )
-                            }
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <ArrowBtn
-                      dir="right"
-                      ariaLabel="Scroll right"
-                      disabled={(!canLoadMore && ui.atEnd) || !!loadingMore[row.key]}
-                      onClick={() => scrollRight(row.key)}
-                    />
-
-                    {!!loadingMore[row.key] && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          right: 64,
-                          top: 10,
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          background: "rgba(20,20,28,0.85)",
-                          border: "1px solid rgba(255,255,255,0.12)"
-                        }}
-                        className="muted"
-                      >
-                        Loading…
-                      </div>
-                    )}
+                  <div className="rail" style={{ maxWidth: "100%", minWidth: 0 }}>
+                    {(row.items || []).map((it) => (
+                      <TitleCard
+                        key={`${row.key}-${it.watchmodeTitleId}`}
+                        item={it}
+                        action={
+                          isMyList ? (
+                            <button
+                              className="btn secondary"
+                              style={{ padding: "8px 10px", borderRadius: 10 }}
+                              onClick={() => removeFromList(it.watchmodeTitleId)}
+                            >
+                              Remove
+                            </button>
+                          ) : (
+                            <button
+                              className="btn"
+                              style={{ padding: "8px 10px", borderRadius: 10 }}
+                              onClick={() => addToList(it)}
+                            >
+                              + Add
+                            </button>
+                          )
+                        }
+                      />
+                    ))}
                   </div>
-
-                  {canLoadMore && ui.atEnd && !loadingMore[row.key] && (
-                    <div className="muted" style={{ marginTop: 8 }}>
-                      Tip: press the right arrow again to load more.
-                    </div>
-                  )}
                 </div>
               );
             })}
 
-            {!isSpecificGenre && !includeGenres && (
+            {/* Convenience: load genre rows at bottom too */}
+            {!payload?.includeGenres ? (
               <div className="card muted">
-                <div style={{ marginBottom: 10 }}>
-                  Genre rows are available — click <b>Load genre rows</b> to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
+                Genre rows are available — click <b>Load genre rows</b> above to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
+                <div style={{ marginTop: 10 }}>
+                  <button className="btn secondary" onClick={loadGenreRows}>
+                    Load genre rows
+                  </button>
                 </div>
-                <button className="btn secondary" onClick={onLoadGenres} disabled={includeGenres || loadingGenres}>
-                  {includeGenres ? "Genre rows loaded" : loadingGenres ? "Loading genre rows…" : "Load genre rows"}
-                </button>
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>
