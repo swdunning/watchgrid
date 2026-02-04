@@ -1,4 +1,5 @@
 import TitleCard from "./TitleCard";
+import React from "react";
 
 type RowItem = {
   watchmodeTitleId: number;
@@ -6,6 +7,10 @@ type RowItem = {
   type: string;
   poster: string | null;
   watchUrl?: string | null;
+
+  // optional metadata (used by AllLists)
+  provider?: string;
+  genresStatus?: "PENDING" | "OK" | "NONE" | "ERROR";
 };
 
 export default function ProviderRow({
@@ -14,7 +19,8 @@ export default function ProviderRow({
   items,
   onSeeAll,
   onRemove,
-  variant = "list"
+  variant = "list",
+  itemAction
 }: {
   title: string;
   logoUrl?: string | null;
@@ -22,6 +28,12 @@ export default function ProviderRow({
   onSeeAll?: () => void;
   onRemove?: (id: number) => void;
   variant?: "list" | "suggested";
+
+  /**
+   * Optional per-item action renderer.
+   * If provided, it takes priority over onRemove.
+   */
+  itemAction?: (item: RowItem) => React.ReactNode;
 }) {
   return (
     <div className={`wgRow ${variant === "suggested" ? "wgRowSuggested" : ""}`}>
@@ -33,30 +45,41 @@ export default function ProviderRow({
 
         {onSeeAll ? (
           <button className="wgPillBtn" onClick={onSeeAll}>
-  See all
-</button>
-
+            See all
+          </button>
         ) : null}
       </div>
 
       <div className="rail">
-        {(items || []).map((it) => (
-          <TitleCard
-            key={it.watchmodeTitleId}
-            item={it}
-            action={
-              onRemove ? (
-                <button
-                  className="btn secondary"
-                  style={{ padding: "8px 10px", borderRadius: 10 }}
-                  onClick={() => onRemove(it.watchmodeTitleId)}
-                >
-                  Remove
-                </button>
-              ) : undefined
-            }
-          />
-        ))}
+        {(items || []).map((it) => {
+          // Priority:
+          // 1) itemAction (AllLists / special cases)
+          // 2) onRemove (Provider page)
+          // 3) nothing
+          let action: React.ReactNode | undefined;
+
+          if (itemAction) {
+            action = itemAction(it);
+          } else if (onRemove) {
+            action = (
+              <button
+                className="btn secondary"
+                style={{ padding: "8px 10px", borderRadius: 10 }}
+                onClick={() => onRemove(it.watchmodeTitleId)}
+              >
+                Remove
+              </button>
+            );
+          }
+
+          return (
+            <TitleCard
+              key={it.watchmodeTitleId}
+              item={it}
+              action={action}
+            />
+          );
+        })}
       </div>
     </div>
   );

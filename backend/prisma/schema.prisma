@@ -7,6 +7,13 @@ datasource db {
     provider = "postgresql"
 }
 
+enum GenresStatus {
+    PENDING
+    OK
+    NONE
+    ERROR
+}
+
 model User {
     id           String         @id @default(cuid())
     email        String         @unique
@@ -37,6 +44,10 @@ model SavedItem {
     poster           String?
     watchUrl         String?
     createdAt        DateTime @default(now())
+
+    genres            String[]     @default([])
+    genresStatus      GenresStatus @default(PENDING)
+    genresAttemptedAt DateTime?
 
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

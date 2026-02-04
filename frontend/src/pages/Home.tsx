@@ -259,7 +259,7 @@ export default function Home() {
                     title="All My Lists"
                     logoUrl={null}
                     items={masterSavedItems}
-                    onSeeAll={() => nav("/app")}
+                    onSeeAll={() => nav("/app/all")}
                   />
                 </div>
               )}
