@@ -130,7 +130,25 @@ export default function Home() {
     }
   };
 
-  const addToList = async (provider: string, item: RowItem) => {
+ const addToList = async (provider: string, item: RowItem) => {
+  setErr(null);
+
+  // optimistic insert into that provider's savedItems
+  setRows((prev) =>
+    prev.map((row) => {
+      if (row.provider !== provider) return row;
+
+      const existing = (row.savedItems || []).some((x) => x.watchmodeTitleId === item.watchmodeTitleId);
+      if (existing) return row;
+
+      return {
+        ...row,
+        savedItems: [item, ...(row.savedItems || [])],
+      };
+    })
+  );
+
+  try {
     await api("/api/lists/add", {
       method: "POST",
       body: JSON.stringify({
@@ -139,19 +157,68 @@ export default function Home() {
         title: item.title,
         type: item.type,
         poster: item.poster,
-        watchUrl: item.watchUrl
-      })
+        watchUrl: item.watchUrl,
+      }),
     });
-    await loadHome();
-  };
+    // ✅ no reloadHome() = zero flicker
+  } catch (e: any) {
+    // revert
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.provider !== provider) return row;
+        return {
+          ...row,
+          savedItems: (row.savedItems || []).filter((x) => x.watchmodeTitleId !== item.watchmodeTitleId),
+        };
+      })
+    );
+    setErr(e?.message ?? "Failed to add");
+  }
+};
+
 
   const removeFromList = async (provider: string, watchmodeTitleId: number) => {
+  setErr(null);
+
+  // capture the item so we can revert if needed
+  const removedItem =
+    rows
+      .find((r) => r.provider === provider)
+      ?.savedItems?.find((x) => x.watchmodeTitleId === watchmodeTitleId) ?? null;
+
+  // optimistic remove
+  setRows((prev) =>
+    prev.map((row) => {
+      if (row.provider !== provider) return row;
+      return {
+        ...row,
+        savedItems: (row.savedItems || []).filter((x) => x.watchmodeTitleId !== watchmodeTitleId),
+      };
+    })
+  );
+
+  try {
     await api("/api/lists/remove", {
       method: "POST",
-      body: JSON.stringify({ provider, watchmodeTitleId })
+      body: JSON.stringify({ provider, watchmodeTitleId }),
     });
-    await loadHome();
-  };
+    // no reloadHome()
+  } catch (e: any) {
+    // revert (only if we actually had it)
+    if (removedItem) {
+      setRows((prev) =>
+        prev.map((row) => {
+          if (row.provider !== provider) return row;
+          const exists = (row.savedItems || []).some((x) => x.watchmodeTitleId === watchmodeTitleId);
+          if (exists) return row;
+          return { ...row, savedItems: [removedItem, ...(row.savedItems || [])] };
+        })
+      );
+    }
+    setErr(e?.message ?? "Failed to remove");
+  }
+};
+
 
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
