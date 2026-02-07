@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "../components/Header";
 import TitleCard from "../components/TitleCard";
@@ -38,12 +38,6 @@ export default function ProviderPage() {
   const nav = useNavigate();
   const { provider: providerParam } = useParams();
   const provider = String(providerParam || "").toUpperCase();
-
-  // Refs for each row rail so we can scroll after load-more
-  const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-  // after "Load more", we set this so an effect can scroll once DOM updates
-  const [pendingScroll, setPendingScroll] = useState<null | { rowKey: string; index: number }>(null);
 
   const [meta, setMeta] = useState<ProviderMeta | null>(null);
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -124,42 +118,6 @@ export default function ProviderPage() {
     if (q.trim() === "") setResults([]);
   }, [q]);
 
-  // ✅ Auto-scroll effect after load-more appends items
-  useEffect(() => {
-    if (!pendingScroll) return;
-
-    const { rowKey, index } = pendingScroll;
-    const rail = railRefs.current[rowKey];
-
-    // wait until the appended DOM nodes exist
-    requestAnimationFrame(() => {
-      const target = rail?.children?.[index] as HTMLElement | undefined;
-
-      if (target) {
-        target.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-          inline: "start",
-        });
-        setPendingScroll(null);
-        return;
-      }
-
-      // rare case: one more frame
-      requestAnimationFrame(() => {
-        const target2 = rail?.children?.[index] as HTMLElement | undefined;
-        if (target2) {
-          target2.scrollIntoView({
-            behavior: "smooth",
-            block: "nearest",
-            inline: "start",
-          });
-        }
-        setPendingScroll(null);
-      });
-    });
-  }, [pendingScroll]);
-
   const closeSearch = () => {
     setSearchOpen(false);
     setQ("");
@@ -191,7 +149,7 @@ export default function ProviderPage() {
           type: r.type,
           poster: r.poster ?? null,
           watchUrl: r.watchUrl ?? null,
-          provider,
+          provider
         }))
       );
     } catch (e: any) {
@@ -201,26 +159,7 @@ export default function ProviderPage() {
     }
   };
 
-const addToList = async (item: RowItem) => {
-  setErr(null);
-
-  // optimistic: add to my_list row immediately
-  setPayload((prev) => {
-    if (!prev) return prev;
-    return {
-      ...prev,
-      rows: prev.rows.map((r) => {
-        if (r.kind !== "my_list") return r;
-
-        const exists = (r.items || []).some((x) => x.watchmodeTitleId === item.watchmodeTitleId);
-        if (exists) return r;
-
-        return { ...r, items: [item, ...(r.items || [])] };
-      }),
-    };
-  });
-
-  try {
+  const addToList = async (item: RowItem) => {
     await api("/api/lists/add", {
       method: "POST",
       body: JSON.stringify({
@@ -229,74 +168,19 @@ const addToList = async (item: RowItem) => {
         title: item.title,
         type: item.type,
         poster: item.poster,
-        watchUrl: item.watchUrl,
-      }),
+        watchUrl: item.watchUrl
+      })
     });
-    // ✅ no loadRows() = zero flicker
-  } catch (e: any) {
-    // revert: remove from my_list row
-    setPayload((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        rows: prev.rows.map((r) => {
-          if (r.kind !== "my_list") return r;
-          return { ...r, items: (r.items || []).filter((x) => x.watchmodeTitleId !== item.watchmodeTitleId) };
-        }),
-      };
-    });
-    setErr(e?.message ?? "Failed to add");
-  }
-};
+    await loadRows(payload?.includeGenres ?? false);
+  };
 
-
-const removeFromList = async (watchmodeTitleId: number) => {
-  setErr(null);
-
-  // capture item for revert
-  const removedItem =
-    payload?.rows
-      ?.find((r) => r.kind === "my_list")
-      ?.items?.find((x) => x.watchmodeTitleId === watchmodeTitleId) ?? null;
-
-  // optimistic remove from my_list
-  setPayload((prev) => {
-    if (!prev) return prev;
-    return {
-      ...prev,
-      rows: prev.rows.map((r) => {
-        if (r.kind !== "my_list") return r;
-        return { ...r, items: (r.items || []).filter((x) => x.watchmodeTitleId !== watchmodeTitleId) };
-      }),
-    };
-  });
-
-  try {
+  const removeFromList = async (watchmodeTitleId: number) => {
     await api("/api/lists/remove", {
       method: "POST",
-      body: JSON.stringify({ provider, watchmodeTitleId }),
+      body: JSON.stringify({ provider, watchmodeTitleId })
     });
-    // ✅ no loadRows()
-  } catch (e: any) {
-    // revert
-    if (removedItem) {
-      setPayload((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          rows: prev.rows.map((r) => {
-            if (r.kind !== "my_list") return r;
-            const exists = (r.items || []).some((x) => x.watchmodeTitleId === watchmodeTitleId);
-            if (exists) return r;
-            return { ...r, items: [removedItem, ...(r.items || [])] };
-          }),
-        };
-      });
-    }
-    setErr(e?.message ?? "Failed to remove");
-  }
-};
-
+    await loadRows(payload?.includeGenres ?? false);
+  };
 
   const loadGenreRows = async () => {
     await loadRows(true);
@@ -307,8 +191,6 @@ const removeFromList = async (watchmodeTitleId: number) => {
     const row = payload.rows.find((r) => r.key === rowKey);
     if (!row) return;
     if (!row.canLoadMore) return;
-
-    const oldLen = (row.items || []).length; // ✅ first index of newly appended items
 
     setLoadingMore((prev) => ({ ...prev, [rowKey]: true }));
     setErr(null);
@@ -335,14 +217,11 @@ const removeFromList = async (watchmodeTitleId: number) => {
               ...r,
               page: more.page,
               canLoadMore: more.canLoadMore,
-              items: [...(r.items || []), ...(more.items || [])],
+              items: [...(r.items || []), ...(more.items || [])]
             };
-          }),
+          })
         };
       });
-
-      // ✅ scroll to the first newly loaded item once render completes
-      setPendingScroll({ rowKey, index: oldLen });
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load more");
     } finally {
@@ -458,11 +337,7 @@ const removeFromList = async (watchmodeTitleId: number) => {
                     key={`${provider}-${r.watchmodeTitleId}`}
                     item={r}
                     action={
-                      <button
-                        className="btn"
-                        style={{ padding: "8px 10px", borderRadius: 10 }}
-                        onClick={() => addToList(r)}
-                      >
+                      <button className="btn" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => addToList(r)}>
                         + Add
                       </button>
                     }
@@ -495,23 +370,19 @@ const removeFromList = async (watchmodeTitleId: number) => {
                     </div>
 
                     {!isMyList && canLoadMore ? (
-                      <button
-                        className="wgPillBtn"
-                        onClick={() => loadMoreForRow(row.key)}
-                        disabled={isLoadingMore}
-                      >
-                        {isLoadingMore ? "Loading…" : "→ Load more"}
-                      </button>
+                    <button
+  className="wgPillBtn"
+  onClick={() => loadMoreForRow(row.key)}
+  disabled={isLoadingMore}
+>
+  {isLoadingMore ? "Loading…" : "→ Load more"}
+</button>
+
+
                     ) : null}
                   </div>
 
-                  <div
-                    className="rail"
-                    style={{ maxWidth: "100%", minWidth: 0 }}
-                    ref={(el) => {
-                      railRefs.current[row.key] = el;
-                    }}
-                  >
+                  <div className="rail" style={{ maxWidth: "100%", minWidth: 0 }}>
                     {(row.items || []).map((it) => (
                       <TitleCard
                         key={`${row.key}-${it.watchmodeTitleId}`}
@@ -545,8 +416,7 @@ const removeFromList = async (watchmodeTitleId: number) => {
             {/* Convenience: load genre rows at bottom too */}
             {!payload?.includeGenres ? (
               <div className="card muted">
-                Genre rows are available — click <b>Load genre rows</b> above to fetch
-                Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
+                Genre rows are available — click <b>Load genre rows</b> above to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
                 <div style={{ marginTop: 10 }}>
                   <button className="btn secondary" onClick={loadGenreRows}>
                     Load genre rows
