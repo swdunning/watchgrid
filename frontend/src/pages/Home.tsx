@@ -1,3 +1,4 @@
+// Home.tsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
@@ -34,11 +35,10 @@ export default function Home() {
   const [masterSavedItems, setMasterSavedItems] = useState<RowItem[]>([]);
   const [rateLimited, setRateLimited] = useState(false);
   const [meta, setMeta] = useState<Record<string, ProviderMeta>>({});
-
   const [err, setErr] = useState<string | null>(null);
   const [loadingHome, setLoadingHome] = useState(true);
 
-  // Search state (restored)
+  // Search
   const [q, setQ] = useState("");
   const [results, setResults] = useState<RowItem[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -72,7 +72,7 @@ export default function Home() {
         map[String(p.provider).toUpperCase()] = {
           provider: String(p.provider).toUpperCase(),
           label: p.label,
-          logoUrl: p.logoUrl ?? null
+          logoUrl: p.logoUrl ?? null,
         };
       }
       setMeta(map);
@@ -87,7 +87,6 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Clear results if query cleared
   useEffect(() => {
     if (q.trim() === "") setResults([]);
   }, [q]);
@@ -120,7 +119,7 @@ export default function Home() {
           type: r.type,
           poster: r.poster ?? null,
           watchUrl: r.watchUrl ?? null,
-          provider: r.provider
+          provider: r.provider,
         }))
       );
     } catch (e: any) {
@@ -130,27 +129,118 @@ export default function Home() {
     }
   };
 
-  const addToList = async (provider: string, item: RowItem) => {
-    await api("/api/lists/add", {
-      method: "POST",
-      body: JSON.stringify({
-        provider,
-        watchmodeTitleId: item.watchmodeTitleId,
-        title: item.title,
-        type: item.type,
-        poster: item.poster,
-        watchUrl: item.watchUrl
+  // ✅ When a card resolves its URL, patch it in local state so it stays enabled
+  const patchWatchUrl = (provider: string | undefined, watchmodeTitleId: number, watchUrl: string) => {
+    if (!provider) return;
+
+    setResults((prev) =>
+      prev.map((x) => (x.provider === provider && x.watchmodeTitleId === watchmodeTitleId ? { ...x, watchUrl } : x))
+    );
+
+    setMasterSavedItems((prev) =>
+      prev.map((x) => (x.provider === provider && x.watchmodeTitleId === watchmodeTitleId ? { ...x, watchUrl } : x))
+    );
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.provider !== provider) return row;
+        return {
+          ...row,
+          savedItems: (row.savedItems || []).map((x) => (x.watchmodeTitleId === watchmodeTitleId ? { ...x, watchUrl } : x)),
+          popularItems: (row.popularItems || []).map((x) => (x.watchmodeTitleId === watchmodeTitleId ? { ...x, watchUrl } : x)),
+        };
       })
-    });
-    await loadHome();
+    );
   };
 
-  const removeFromList = async (provider: string, watchmodeTitleId: number) => {
-    await api("/api/lists/remove", {
-      method: "POST",
-      body: JSON.stringify({ provider, watchmodeTitleId })
+  /**
+   * Optimistic add
+   */
+  const addToList = async (provider: string, item: RowItem) => {
+    setErr(null);
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.provider !== provider) return row;
+        const exists = (row.savedItems || []).some((x) => x.watchmodeTitleId === item.watchmodeTitleId);
+        if (exists) return row;
+        return { ...row, savedItems: [{ ...item, provider }, ...(row.savedItems || [])] };
+      })
+    );
+
+    setMasterSavedItems((prev) => {
+      const exists = prev.some((x) => x.watchmodeTitleId === item.watchmodeTitleId && x.provider === provider);
+      if (exists) return prev;
+      return [{ ...item, provider }, ...prev];
     });
-    await loadHome();
+
+    try {
+      await api("/api/lists/add", {
+        method: "POST",
+        body: JSON.stringify({
+          provider,
+          watchmodeTitleId: item.watchmodeTitleId,
+          title: item.title,
+          type: item.type,
+          poster: item.poster,
+          watchUrl: item.watchUrl,
+        }),
+      });
+    } catch (e: any) {
+      setRows((prev) =>
+        prev.map((row) => {
+          if (row.provider !== provider) return row;
+          return {
+            ...row,
+            savedItems: (row.savedItems || []).filter((x) => x.watchmodeTitleId !== item.watchmodeTitleId),
+          };
+        })
+      );
+      setMasterSavedItems((prev) =>
+        prev.filter((x) => !(x.watchmodeTitleId === item.watchmodeTitleId && x.provider === provider))
+      );
+      setErr(e?.message ?? "Failed to add");
+    }
+  };
+
+  /**
+   * Optimistic remove
+   */
+  const removeFromList = async (provider: string, watchmodeTitleId: number) => {
+    setErr(null);
+
+    const removedItem =
+      rows.find((r) => r.provider === provider)?.savedItems?.find((x) => x.watchmodeTitleId === watchmodeTitleId) ?? null;
+
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.provider !== provider) return row;
+        return { ...row, savedItems: (row.savedItems || []).filter((x) => x.watchmodeTitleId !== watchmodeTitleId) };
+      })
+    );
+
+    setMasterSavedItems((prev) =>
+      prev.filter((x) => !(x.watchmodeTitleId === watchmodeTitleId && x.provider === provider))
+    );
+
+    try {
+      await api("/api/lists/remove", {
+        method: "POST",
+        body: JSON.stringify({ provider, watchmodeTitleId }),
+      });
+    } catch (e: any) {
+      if (removedItem) {
+        setRows((prev) =>
+          prev.map((row) => {
+            if (row.provider !== provider) return row;
+            const exists = (row.savedItems || []).some((x) => x.watchmodeTitleId === watchmodeTitleId);
+            if (exists) return row;
+            return { ...row, savedItems: [removedItem, ...(row.savedItems || [])] };
+          })
+        );
+      }
+      setErr(e?.message ?? "Failed to remove");
+    }
   };
 
   const logout = async () => {
@@ -178,7 +268,6 @@ export default function Home() {
           <h1 style={{ marginTop: 0 }}>Your WatchGrid</h1>
           <p className="muted">Your lists by service — and popular picks to help you start.</p>
 
-          {/* Search (restored) */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
             <input
               className="input"
@@ -203,7 +292,6 @@ export default function Home() {
 
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
 
-          {/* Netflix-style animated search rail */}
           <div className={`searchPanel ${searchOpen ? "open" : ""}`}>
             <div className="searchPanelHeader">
               <div className="searchPanelTitle">
@@ -222,6 +310,7 @@ export default function Home() {
                   <TitleCard
                     key={`${r.provider ?? "X"}-${r.watchmodeTitleId}`}
                     item={r}
+                    onWatchUrlResolved={(id, url) => patchWatchUrl(r.provider, id, url)}
                     action={
                       r.provider ? (
                         <button
@@ -255,12 +344,7 @@ export default function Home() {
             <>
               {masterSavedItems.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <ProviderRow
-                    title="All My Lists"
-                    logoUrl={null}
-                    items={masterSavedItems}
-                    onSeeAll={() => nav("/app/all")}
-                  />
+                  <ProviderRow title="All My Lists" logoUrl={null} items={masterSavedItems} onSeeAll={() => nav("/app/all")} />
                 </div>
               )}
 
@@ -271,7 +355,6 @@ export default function Home() {
                 const items = hasSaved ? row.savedItems : row.popularItems;
                 const title = hasSaved ? `My List – ${row.label}` : `Popular on ${row.label}`;
                 const hint = hasSaved ? "" : "Click to add items to your list";
-
                 const logoUrl = meta[pKey]?.logoUrl ?? null;
 
                 return (

@@ -1,3 +1,4 @@
+// ProviderPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "../components/Header";
@@ -22,7 +23,7 @@ type ProviderRowPayload = {
   rateLimited?: boolean;
   rows: Array<{
     key: string;
-    kind: string; // e.g. "my_list", "popular_tv", etc
+    kind: string;
     title: string;
     page: number;
     canLoadMore: boolean;
@@ -113,7 +114,6 @@ export default function ProviderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, mode, genreId]);
 
-  // Clear search results when query cleared
   useEffect(() => {
     if (q.trim() === "") setResults([]);
   }, [q]);
@@ -138,9 +138,7 @@ export default function ProviderPage() {
     setResults([]);
 
     try {
-      const data = await api<any[]>(
-        `/api/search?q=${encodeURIComponent(term)}&provider=${encodeURIComponent(provider)}`
-      );
+      const data = await api<any[]>(`/api/search?q=${encodeURIComponent(term)}&provider=${encodeURIComponent(provider)}`);
 
       setResults(
         (data || []).map((r: any) => ({
@@ -159,27 +157,133 @@ export default function ProviderPage() {
     }
   };
 
-  const addToList = async (item: RowItem) => {
-    await api("/api/lists/add", {
-      method: "POST",
-      body: JSON.stringify({
-        provider,
-        watchmodeTitleId: item.watchmodeTitleId,
-        title: item.title,
-        type: item.type,
-        poster: item.poster,
-        watchUrl: item.watchUrl
-      })
+  /**
+   * When TitleCard lazily resolves watchUrl, patch it into:
+   * 1) payload rows (all rows)
+   * 2) provider-scoped search results
+   */
+  const applyWatchUrl = (watchmodeTitleId: number, watchUrl: string | null) => {
+    if (!watchUrl) return;
+
+    // Patch payload rows
+    setPayload((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        rows: prev.rows.map((r) => ({
+          ...r,
+          items: (r.items || []).map((it) =>
+            it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it
+          ),
+        })),
+      };
     });
-    await loadRows(payload?.includeGenres ?? false);
+
+    // Patch provider search results
+    setResults((prev) =>
+      (prev || []).map((it) => (it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it))
+    );
   };
 
-  const removeFromList = async (watchmodeTitleId: number) => {
-    await api("/api/lists/remove", {
-      method: "POST",
-      body: JSON.stringify({ provider, watchmodeTitleId })
+  /**
+   * Patch helper: update "my_list" row items without reloading the whole page (zero flicker).
+   */
+  const patchMyList = (updater: (items: RowItem[]) => RowItem[]) => {
+    setPayload((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        rows: prev.rows.map((r) => {
+          if (r.kind !== "my_list") return r;
+          return { ...r, items: updater(r.items || []) };
+        })
+      };
     });
-    await loadRows(payload?.includeGenres ?? false);
+  };
+
+  /**
+   * Optimistic add:
+   * 1) insert into my_list immediately
+   * 2) POST /lists/add
+   * 3) use API response to patch watchUrl so Open works instantly
+   * 4) revert on failure
+   */
+  const addToList = async (item: RowItem) => {
+    setErr(null);
+
+    const optimistic: RowItem = {
+      ...item,
+      provider,
+      watchUrl: item.watchUrl ?? null
+    };
+
+    // optimistic insert
+    patchMyList((items) => {
+      const exists = items.some((x) => x.watchmodeTitleId === optimistic.watchmodeTitleId);
+      if (exists) return items;
+      return [optimistic, ...items];
+    });
+
+    try {
+      const res = await api<{ item: any }>("/api/lists/add", {
+        method: "POST",
+        body: JSON.stringify({
+          provider,
+          watchmodeTitleId: item.watchmodeTitleId,
+          title: item.title,
+          type: item.type,
+          poster: item.poster,
+          watchUrl: item.watchUrl
+        })
+      });
+
+      const saved = res?.item;
+      const returnedWatchUrl: string | null = saved?.watchUrl ?? null;
+
+      // patch list + any other spots in this page
+      if (returnedWatchUrl) {
+        patchMyList((items) =>
+          items.map((x) =>
+            x.watchmodeTitleId === optimistic.watchmodeTitleId ? { ...x, watchUrl: returnedWatchUrl } : x
+          )
+        );
+        applyWatchUrl(optimistic.watchmodeTitleId, returnedWatchUrl);
+      }
+    } catch (e: any) {
+      patchMyList((items) => items.filter((x) => x.watchmodeTitleId !== optimistic.watchmodeTitleId));
+      setErr(e?.message ?? "Failed to add");
+    }
+  };
+
+  /**
+   * Optimistic remove:
+   * 1) remove from my_list immediately
+   * 2) POST /lists/remove
+   * 3) revert on failure
+   */
+  const removeFromList = async (watchmodeTitleId: number) => {
+    setErr(null);
+
+    const removed =
+      payload?.rows.find((r) => r.kind === "my_list")?.items?.find((x) => x.watchmodeTitleId === watchmodeTitleId) ?? null;
+
+    patchMyList((items) => items.filter((x) => x.watchmodeTitleId !== watchmodeTitleId));
+
+    try {
+      await api("/api/lists/remove", {
+        method: "POST",
+        body: JSON.stringify({ provider, watchmodeTitleId })
+      });
+    } catch (e: any) {
+      if (removed) {
+        patchMyList((items) => {
+          const exists = items.some((x) => x.watchmodeTitleId === watchmodeTitleId);
+          if (exists) return items;
+          return [removed, ...items];
+        });
+      }
+      setErr(e?.message ?? "Failed to remove");
+    }
   };
 
   const loadGenreRows = async () => {
@@ -189,8 +293,7 @@ export default function ProviderPage() {
   const loadMoreForRow = async (rowKey: string) => {
     if (!payload) return;
     const row = payload.rows.find((r) => r.key === rowKey);
-    if (!row) return;
-    if (!row.canLoadMore) return;
+    if (!row || !row.canLoadMore) return;
 
     setLoadingMore((prev) => ({ ...prev, [rowKey]: true }));
     setErr(null);
@@ -294,12 +397,11 @@ export default function ProviderPage() {
               onChange={(e) => setGenreId(e.target.value)}
             >
               <option value="all">All</option>
-              {Array.isArray(genres) &&
-                genres.map((g) => (
-                  <option key={g.id} value={String(g.id)}>
-                    {g.name}
-                  </option>
-                ))}
+              {genres.map((g) => (
+                <option key={g.id} value={String(g.id)}>
+                  {g.name}
+                </option>
+              ))}
             </select>
 
             <button className="btn secondary" onClick={loadGenreRows}>
@@ -336,6 +438,7 @@ export default function ProviderPage() {
                   <TitleCard
                     key={`${provider}-${r.watchmodeTitleId}`}
                     item={r}
+                    onWatchUrlResolved={(url) => applyWatchUrl(r.watchmodeTitleId, url)}
                     action={
                       <button className="btn" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => addToList(r)}>
                         + Add
@@ -370,15 +473,9 @@ export default function ProviderPage() {
                     </div>
 
                     {!isMyList && canLoadMore ? (
-                    <button
-  className="wgPillBtn"
-  onClick={() => loadMoreForRow(row.key)}
-  disabled={isLoadingMore}
->
-  {isLoadingMore ? "Loading…" : "→ Load more"}
-</button>
-
-
+                      <button className="wgPillBtn" onClick={() => loadMoreForRow(row.key)} disabled={isLoadingMore}>
+                        {isLoadingMore ? "Loading…" : "→ Load more"}
+                      </button>
                     ) : null}
                   </div>
 
@@ -387,6 +484,7 @@ export default function ProviderPage() {
                       <TitleCard
                         key={`${row.key}-${it.watchmodeTitleId}`}
                         item={it}
+                        onWatchUrlResolved={(url) => applyWatchUrl(it.watchmodeTitleId, url)}
                         action={
                           isMyList ? (
                             <button
@@ -413,7 +511,6 @@ export default function ProviderPage() {
               );
             })}
 
-            {/* Convenience: load genre rows at bottom too */}
             {!payload?.includeGenres ? (
               <div className="card muted">
                 Genre rows are available — click <b>Load genre rows</b> above to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.

@@ -1,3 +1,4 @@
+// AllLists.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
@@ -126,6 +127,27 @@ export default function AllLists() {
     setResults(filteredItems.filter((it) => it.title.toLowerCase().includes(lower)));
   };
 
+  /**
+   * When TitleCard lazily resolves watchUrl, patch it into:
+   * - items
+   * - results
+   */
+  const applyWatchUrl = (provider: string, watchmodeTitleId: number, watchUrl: string | null) => {
+    if (!watchUrl) return;
+
+    setItems((prev) =>
+      (prev || []).map((it) =>
+        it.provider === provider && it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it
+      )
+    );
+
+    setResults((prev) =>
+      (prev || []).map((it) =>
+        it.provider === provider && it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it
+      )
+    );
+  };
+
   // Genre bucketing: alphabetical, Unknown genre always last
   const bucketGenres = (it: SavedItem): string[] => {
     if (it.genresStatus === "OK" && Array.isArray(it.genres) && it.genres.length > 0) return it.genres;
@@ -143,7 +165,6 @@ export default function AllLists() {
     }
 
     const entries = Array.from(map.entries());
-
     entries.sort((a, b) => {
       if (a[0] === "Unknown genre") return 1;
       if (b[0] === "Unknown genre") return -1;
@@ -166,11 +187,40 @@ export default function AllLists() {
     try {
       await api("/api/lists/genres/retry", {
         method: "POST",
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id })
       });
-      await load(); // refresh items (fast; DB-only)
+      await load();
     } catch (e: any) {
       setErr(e?.message ?? "Retry failed");
+    }
+  };
+
+  /**
+   * Optimistic remove from AllLists:
+   * - removes from main list and any current search results
+   * - reverts on failure
+   */
+  const removeSaved = async (provider: string, watchmodeTitleId: number) => {
+    setErr(null);
+
+    const removed = items.find((x) => x.provider === provider && x.watchmodeTitleId === watchmodeTitleId) ?? null;
+
+    setItems((prev) => prev.filter((x) => !(x.provider === provider && x.watchmodeTitleId === watchmodeTitleId)));
+    setResults((prev) => prev.filter((x) => !(x.provider === provider && x.watchmodeTitleId === watchmodeTitleId)));
+
+    try {
+      await api("/api/lists/remove", {
+        method: "POST",
+        body: JSON.stringify({ provider, watchmodeTitleId })
+      });
+    } catch (e: any) {
+      if (removed) {
+        setItems((prev) => {
+          const exists = prev.some((x) => x.provider === provider && x.watchmodeTitleId === watchmodeTitleId);
+          return exists ? prev : [removed, ...prev];
+        });
+      }
+      setErr(e?.message ?? "Failed to remove");
     }
   };
 
@@ -186,13 +236,34 @@ export default function AllLists() {
         border: "1px solid rgba(255,255,255,0.10)",
         background: "rgba(255,255,255,0.06)",
         color: "rgba(255,255,255,0.75)",
-        fontWeight: 800,
+        fontWeight: 800
       }}
       title="We couldn't resolve genres for this title yet."
     >
       <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--wg-purple)" }} />
       Unknown genre
     </span>
+  );
+
+  const savedItemActions = (it: SavedItem) => (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <button
+        className="btn secondary"
+        style={{ padding: "8px 10px", borderRadius: 10 }}
+        onClick={() => removeSaved(it.provider, it.watchmodeTitleId)}
+      >
+        Remove
+      </button>
+
+      {it.genresStatus === "ERROR" ? (
+        <>
+          {unknownBadge}
+          <button className="wgPillBtn" style={{ padding: "8px 12px" }} onClick={() => retryGenres(it.id)}>
+            Retry
+          </button>
+        </>
+      ) : null}
+    </div>
   );
 
   return (
@@ -267,11 +338,7 @@ export default function AllLists() {
                     title={label}
                   >
                     {logoUrl ? (
-                      <img
-                        src={logoUrl}
-                        alt=""
-                        style={{ width: 22, height: 22, borderRadius: 6, objectFit: "cover" }}
-                      />
+                      <img src={logoUrl} alt="" style={{ width: 22, height: 22, borderRadius: 6, objectFit: "cover" }} />
                     ) : null}
                     <span style={{ fontWeight: 900 }}>{label}</span>
                   </button>
@@ -306,29 +373,15 @@ export default function AllLists() {
                       type: r.type,
                       poster: r.poster ?? null,
                       watchUrl: r.watchUrl ?? null,
-                      provider: r.provider,
+                      provider: r.provider
                     }}
-                    action={
-                      r.genresStatus === "ERROR" ? (
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          {unknownBadge}
-                          <button
-                            className="wgPillBtn"
-                            style={{ padding: "8px 12px" }}
-                            onClick={() => retryGenres(r.id)}
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      ) : undefined
-                    }
+                    onWatchUrlResolved={(url) => applyWatchUrl(r.provider, r.watchmodeTitleId, url)}
+                    action={savedItemActions(r)}
                   />
                 ))}
               </div>
             ) : (
-              <div className="card muted">
-                {q.trim() ? "No matches in your saved lists." : "Start typing a title, then press Enter."}
-              </div>
+              <div className="card muted">{q.trim() ? "No matches in your saved lists." : "Start typing a title, then press Enter."}</div>
             )}
           </div>
         </div>
@@ -354,22 +407,10 @@ export default function AllLists() {
                   type: it.type,
                   poster: it.poster ?? null,
                   watchUrl: it.watchUrl ?? null,
-                  provider: it.provider,
+                  provider: it.provider
                 }}
-                action={
-                  it.genresStatus === "ERROR" ? (
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {unknownBadge}
-                      <button
-                        className="wgPillBtn"
-                        style={{ padding: "8px 12px" }}
-                        onClick={() => retryGenres(it.id)}
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  ) : undefined
-                }
+                onWatchUrlResolved={(url) => applyWatchUrl(it.provider, it.watchmodeTitleId, url)}
+                action={savedItemActions(it)}
               />
             ))}
           </div>
@@ -395,7 +436,7 @@ export default function AllLists() {
                     </div>
 
                     <button className="wgPillBtn" onClick={() => toggleGenreCollapse(genre)}>
-                      {isCollapsed ?  "▶ Expand" : "▼ Collapse"}
+                      {isCollapsed ? "▶ Expand" : "▼ Collapse"}
                     </button>
                   </div>
 
@@ -412,22 +453,10 @@ export default function AllLists() {
                             type: it.type,
                             poster: it.poster ?? null,
                             watchUrl: it.watchUrl ?? null,
-                            provider: it.provider,
+                            provider: it.provider
                           }}
-                          action={
-                            it.genresStatus === "ERROR" ? (
-                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                {unknownBadge}
-                                <button
-                                  className="wgPillBtn"
-                                  style={{ padding: "8px 12px" }}
-                                  onClick={() => retryGenres(it.id)}
-                                >
-                                  Retry
-                                </button>
-                              </div>
-                            ) : undefined
-                          }
+                          onWatchUrlResolved={(url) => applyWatchUrl(it.provider, it.watchmodeTitleId, url)}
+                          action={savedItemActions(it)}
                         />
                       ))}
                     </div>
