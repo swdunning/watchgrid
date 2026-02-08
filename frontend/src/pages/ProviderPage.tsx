@@ -1,5 +1,5 @@
 // ProviderPage.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Header from "../components/Header";
 import TitleCard from "../components/TitleCard";
@@ -61,6 +61,10 @@ export default function ProviderPage() {
 
   // Per-row loading states for Load More
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
+
+  // ✅ Keep a ref to each row's horizontal rail so we can auto-scroll after "Load more"
+const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
 
   // (kept; not used right now but harmless)
   const selectedGenreNum = useMemo(() => (genreId === "all" ? null : Number(genreId)), [genreId]);
@@ -300,6 +304,9 @@ export default function ProviderPage() {
 
     setLoadingMore((prev) => ({ ...prev, [rowKey]: true }));
     setErr(null);
+	// ✅ Capture where the newly appended items will start (in pixels)
+	const railEl = railRefs.current[rowKey];
+	const startOfNewItemsPx = railEl?.scrollWidth ?? 0;
 
     try {
       const nextPage = (row.page ?? 1) + 1;
@@ -328,6 +335,23 @@ export default function ProviderPage() {
           })
         };
       });
+
+	  // ✅ After DOM updates, scroll so the first newly loaded item is first in view
+	requestAnimationFrame(() => {
+  	requestAnimationFrame(() => {
+		const el = railRefs.current[rowKey];
+		if (!el) return;
+
+		// Smooth + snappy (native). Fallback to instant if unsupported.
+		try {
+		el.scrollTo({ left: startOfNewItemsPx, behavior: "smooth" });
+		} catch {
+		el.scrollLeft = startOfNewItemsPx;
+		}
+	});
+	});
+
+
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load more");
     } finally {
@@ -481,7 +505,14 @@ export default function ProviderPage() {
                     ) : null}
                   </div>
 
-                  <div className="rail" style={{ maxWidth: "100%", minWidth: 0 }}>
+                  <div
+					className="rail"
+					style={{ maxWidth: "100%", minWidth: 0 }}
+					ref={(el) => {
+						railRefs.current[row.key] = el;
+					}}
+>
+
                     {(row.items || []).map((it) => {
                       const alreadyAdded = !isMyList && myListIds.has(it.watchmodeTitleId);
 
