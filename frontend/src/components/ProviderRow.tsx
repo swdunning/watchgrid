@@ -63,11 +63,11 @@ export default function ProviderRow({
           } else if (onRemove) {
             action = (
               <button
-                className="btn secondary"
-                style={{ padding: "8px 10px", borderRadius: 10 }}
+                className="btn danger"
+                style={{ padding: "8px 9px", borderRadius: 10 }}
                 onClick={() => onRemove(it.watchmodeTitleId)}
               >
-                Remove
+                – Remove
               </button>
             );
           }

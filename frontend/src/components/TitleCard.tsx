@@ -32,6 +32,18 @@ export default function TitleCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.watchUrl]);
 
+  const openStyle: React.CSSProperties = {
+    padding: "8px 10px",
+    borderRadius: 10,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 800,
+    fontSize: 12,
+    lineHeight: "14px",
+  };
+
+
   const handleOpen = async () => {
     // If we already have the URL, let the <a> handle it (this handler won't be used).
     if (resolvedUrl) return;
@@ -112,7 +124,7 @@ export default function TitleCard({
           {resolvedUrl ? (
             <a
               className="btn secondary"
-              style={{ padding: "8px 10px", borderRadius: 10 }}
+              style={openStyle}
               href={resolvedUrl}
               target="_blank"
               rel="noreferrer noopener"
@@ -122,7 +134,7 @@ export default function TitleCard({
           ) : (
             <button
               className="btn secondary"
-              style={{ padding: "8px 10px", borderRadius: 10 }}
+              style={openStyle}
               onClick={handleOpen}
               disabled={opening || !item.provider}
               title={!item.provider ? "No provider available to resolve link" : "Open on provider"}

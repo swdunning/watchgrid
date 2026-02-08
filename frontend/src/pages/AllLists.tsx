@@ -248,11 +248,11 @@ export default function AllLists() {
   const savedItemActions = (it: SavedItem) => (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       <button
-        className="btn secondary"
-        style={{ padding: "8px 10px", borderRadius: 10 }}
+        className="btn danger"
+        style={{ padding: "8px 9px", borderRadius: 10 }}
         onClick={() => removeSaved(it.provider, it.watchmodeTitleId)}
       >
-        Remove
+        – Remove
       </button>
 
       {it.genresStatus === "ERROR" ? (

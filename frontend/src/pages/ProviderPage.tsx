@@ -62,6 +62,7 @@ export default function ProviderPage() {
   // Per-row loading states for Load More
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
 
+  // (kept; not used right now but harmless)
   const selectedGenreNum = useMemo(() => (genreId === "all" ? null : Number(genreId)), [genreId]);
 
   const loadMeta = async () => {
@@ -172,17 +173,13 @@ export default function ProviderPage() {
         ...prev,
         rows: prev.rows.map((r) => ({
           ...r,
-          items: (r.items || []).map((it) =>
-            it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it
-          ),
-        })),
+          items: (r.items || []).map((it) => (it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it))
+        }))
       };
     });
 
     // Patch provider search results
-    setResults((prev) =>
-      (prev || []).map((it) => (it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it))
-    );
+    setResults((prev) => (prev || []).map((it) => (it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it)));
   };
 
   /**
@@ -200,6 +197,14 @@ export default function ProviderPage() {
       };
     });
   };
+
+  /**
+   * ✅ Set of ids currently in My List (used to disable +Add everywhere else)
+   */
+  const myListIds = useMemo(() => {
+    const my = payload?.rows?.find((r) => r.kind === "my_list")?.items ?? [];
+    return new Set(my.map((x) => x.watchmodeTitleId));
+  }, [payload]);
 
   /**
    * Optimistic add:
@@ -243,9 +248,7 @@ export default function ProviderPage() {
       // patch list + any other spots in this page
       if (returnedWatchUrl) {
         patchMyList((items) =>
-          items.map((x) =>
-            x.watchmodeTitleId === optimistic.watchmodeTitleId ? { ...x, watchUrl: returnedWatchUrl } : x
-          )
+          items.map((x) => (x.watchmodeTitleId === optimistic.watchmodeTitleId ? { ...x, watchUrl: returnedWatchUrl } : x))
         );
         applyWatchUrl(optimistic.watchmodeTitleId, returnedWatchUrl);
       }
@@ -349,9 +352,7 @@ export default function ProviderPage() {
       <div className="page" style={{ display: "grid", gap: 14 }}>
         <div className="card">
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            {meta?.logoUrl ? (
-              <img src={meta.logoUrl} alt="" style={{ width: 42, height: 42, borderRadius: 10 }} />
-            ) : null}
+            {meta?.logoUrl ? <img src={meta.logoUrl} alt="" style={{ width: 42, height: 42, borderRadius: 10 }} /> : null}
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0 }}>{label}</h1>
               <div className="muted">Browse and build your {label} list.</div>
@@ -390,12 +391,7 @@ export default function ProviderPage() {
           {/* Genre selector */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
             <div className="muted">Genre:</div>
-            <select
-              className="input"
-              style={{ maxWidth: 320 }}
-              value={genreId}
-              onChange={(e) => setGenreId(e.target.value)}
-            >
+            <select className="input" style={{ maxWidth: 320 }} value={genreId} onChange={(e) => setGenreId(e.target.value)}>
               <option value="all">All</option>
               {genres.map((g) => (
                 <option key={g.id} value={String(g.id)}>
@@ -411,9 +407,7 @@ export default function ProviderPage() {
 
           {rateLimited && (
             <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
-              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>
-                We’re temporarily rate-limited by Watchmode. Try again in a few minutes.
-              </div>
+              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode. Try again in a few minutes.</div>
             </div>
           )}
 
@@ -434,23 +428,31 @@ export default function ProviderPage() {
 
             {!!results.length ? (
               <div className="rail">
-                {results.map((r) => (
-                  <TitleCard
-                    key={`${provider}-${r.watchmodeTitleId}`}
-                    item={r}
-                    onWatchUrlResolved={(url) => applyWatchUrl(r.watchmodeTitleId, url)}
-                    action={
-                      <button className="btn" style={{ padding: "8px 10px", borderRadius: 10 }} onClick={() => addToList(r)}>
-                        + Add
-                      </button>
-                    }
-                  />
-                ))}
+                {results.map((r) => {
+                  const alreadyAdded = myListIds.has(r.watchmodeTitleId);
+
+                  return (
+                    <TitleCard
+                      key={`${provider}-${r.watchmodeTitleId}`}
+                      item={r}
+                      onWatchUrlResolved={(url) => applyWatchUrl(r.watchmodeTitleId, url)}
+                      action={
+                        <button
+                          className={`btn ${alreadyAdded ? "secondary" : ""}`}
+                          style={{ padding: "8px 10px", borderRadius: 10 }}
+                          onClick={() => addToList(r)}
+                          disabled={alreadyAdded}
+                          title={alreadyAdded ? "Already in your list" : "Add to your list"}
+                        >
+                          {alreadyAdded ? "Added" : "+ Add"}
+                        </button>
+                      }
+                    />
+                  );
+                })}
               </div>
             ) : (
-              <div className="card muted">
-                {q.trim() ? `No results found on ${label}.` : "Start typing a title, then press Enter."}
-              </div>
+              <div className="card muted">{q.trim() ? `No results found on ${label}.` : "Start typing a title, then press Enter."}</div>
             )}
           </div>
         </div>
@@ -480,32 +482,38 @@ export default function ProviderPage() {
                   </div>
 
                   <div className="rail" style={{ maxWidth: "100%", minWidth: 0 }}>
-                    {(row.items || []).map((it) => (
-                      <TitleCard
-                        key={`${row.key}-${it.watchmodeTitleId}`}
-                        item={it}
-                        onWatchUrlResolved={(url) => applyWatchUrl(it.watchmodeTitleId, url)}
-                        action={
-                          isMyList ? (
-                            <button
-                              className="btn secondary"
-                              style={{ padding: "8px 10px", borderRadius: 10 }}
-                              onClick={() => removeFromList(it.watchmodeTitleId)}
-                            >
-                              Remove
-                            </button>
-                          ) : (
-                            <button
-                              className="btn"
-                              style={{ padding: "8px 10px", borderRadius: 10 }}
-                              onClick={() => addToList(it)}
-                            >
-                              + Add
-                            </button>
-                          )
-                        }
-                      />
-                    ))}
+                    {(row.items || []).map((it) => {
+                      const alreadyAdded = !isMyList && myListIds.has(it.watchmodeTitleId);
+
+                      return (
+                        <TitleCard
+                          key={`${row.key}-${it.watchmodeTitleId}`}
+                          item={it}
+                          onWatchUrlResolved={(url) => applyWatchUrl(it.watchmodeTitleId, url)}
+                          action={
+                            isMyList ? (
+                              <button
+                                className="btn danger"
+                                style={{ padding: "8px 9px", borderRadius: 10 }}
+                                onClick={() => removeFromList(it.watchmodeTitleId)}
+                              >
+                                – Remove
+                              </button>
+                            ) : (
+                              <button
+                                className={`btn ${alreadyAdded ? "secondary" : ""}`}
+                                style={{ padding: "8px 10px", borderRadius: 10 }}
+                                onClick={() => addToList(it)}
+                                disabled={alreadyAdded}
+                                title={alreadyAdded ? "Already in your list" : "Add to your list"}
+                              >
+                                {alreadyAdded ? "Added" : "+ Add"}
+                              </button>
+                            )
+                          }
+                        />
+                      );
+                    })}
                   </div>
                 </div>
               );

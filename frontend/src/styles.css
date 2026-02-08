@@ -8,6 +8,10 @@
 	--purple: #6d28d9;
 	--purple2: #4c1d95;
 	--glow: rgba(109, 40, 217, 0.30);
+
+	--danger: #ff5b7a;
+		--danger-border: rgba(255, 91, 122, 0.38);
+		--danger-bg: rgba(255, 91, 122, 0.14);
 }
 
 * {
@@ -209,9 +213,41 @@ a:hover {
 	box-shadow: none;
 }
 
+/* Make <a class="btn ...> look identical to <button class="btn ...> */
+a.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font: inherit;
+	/* key: fixes font mismatch */
+	line-height: inherit;
+	text-decoration: none;
+	/* prevent underline */
+}
+
+a.btn:hover {
+	text-decoration: none;
+	/* your global a:hover underlines; don't underline buttons */
+}
+
 .btn:disabled {
 	opacity: .7;
 	cursor: not-allowed
+}
+
+.btn.danger {
+	background: rgba(255, 14, 58, 0.586);
+	border: 1px solid rgba(255, 91, 122, 0.35);
+	color: var(--text);
+	box-shadow: none;
+}
+
+.btn.danger:hover {
+	filter: brightness(1.05);
+}
+
+.btn.danger:active {
+	transform: translateY(1px);
 }
 
 .input {
