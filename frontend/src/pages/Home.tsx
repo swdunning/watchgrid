@@ -1,5 +1,5 @@
 // Home.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import ProviderRow from "../components/ProviderRow";
@@ -90,6 +90,16 @@ export default function Home() {
   useEffect(() => {
     if (q.trim() === "") setResults([]);
   }, [q]);
+
+  // ✅ Used to disable "+ Add" in Search when already saved
+const savedKeySet = useMemo(() => {
+  const s = new Set<string>();
+  for (const it of masterSavedItems || []) {
+    if (!it.provider) continue;
+    s.add(`${String(it.provider).toUpperCase()}:${it.watchmodeTitleId}`);
+  }
+  return s;
+}, [masterSavedItems]);
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -311,21 +321,27 @@ export default function Home() {
                     key={`${r.provider ?? "X"}-${r.watchmodeTitleId}`}
                     item={r}
                     onWatchUrlResolved={(id, url) => patchWatchUrl(r.provider, id, url)}
-                    action={
-                      r.provider ? (
-                        <button
-                          className="btn"
-                          style={{ padding: "8px 10px", borderRadius: 10 }}
-                          onClick={() => addToList(r.provider!, r)}
-                        >
-                          + Add
-                        </button>
-                      ) : (
-                        <button className="btn secondary" style={{ padding: "8px 10px", borderRadius: 10 }} disabled>
-                          + Add
-                        </button>
-                      )
-                    }
+                    action={(() => {
+  const p = r.provider ? String(r.provider).toUpperCase() : "";
+  const alreadyAdded = !!r.provider && savedKeySet.has(`${p}:${r.watchmodeTitleId}`);
+
+  return r.provider ? (
+    <button
+      className={`btn ${alreadyAdded ? "secondary" : ""}`}
+      style={{ padding: "8px 10px", borderRadius: 10 }}
+      onClick={() => addToList(r.provider!, r)}
+      disabled={alreadyAdded}
+      title={alreadyAdded ? "Already in your list" : "Add to your list"}
+    >
+      {alreadyAdded ? "Added" : "+ Add"}
+    </button>
+  ) : (
+    <button className="btn secondary" style={{ padding: "8px 10px", borderRadius: 10 }} disabled>
+      + Add
+    </button>
+  );
+})()}
+
                   />
                 ))}
               </div>
@@ -343,30 +359,30 @@ export default function Home() {
           ) : (
             <>
               {masterSavedItems.length > 0 && (
-  <div style={{ marginBottom: 16 }}>
-    <ProviderRow
-      title="All My Lists"
-      logoUrl={null}
-      items={masterSavedItems}
-      onSeeAll={() => nav("/app/all")}
-      variant="list"
-      itemAction={(it) => (
-        <button
-          className="btn danger"
-          style={{ padding: "8px 9px", borderRadius: 10 }}
-          onClick={() => {
-            if (!it.provider) return;
-            removeFromList(it.provider, it.watchmodeTitleId);
-          }}
-          disabled={!it.provider}
-          title={!it.provider ? "Missing provider" : "Remove from your list"}
-        >
-          – Remove
-        </button>
-      )}
-    />
-  </div>
-)}
+				<div style={{ marginBottom: 16 }}>
+					<ProviderRow
+					title="All My Lists"
+					logoUrl={null}
+					items={masterSavedItems}
+					onSeeAll={() => nav("/app/all")}
+					variant="list"
+					itemAction={(it) => (
+						<button
+						className="btn danger"
+						style={{ padding: "8px 9px", borderRadius: 10 }}
+						onClick={() => {
+							if (!it.provider) return;
+							removeFromList(it.provider, it.watchmodeTitleId);
+						}}
+						disabled={!it.provider}
+						title={!it.provider ? "Missing provider" : "Remove from your list"}
+						>
+						– Remove
+						</button>
+					)}
+					/>
+				</div>
+				)}
 
 
               {rows.map((row) => {
