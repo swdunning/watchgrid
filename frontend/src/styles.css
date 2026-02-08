@@ -236,8 +236,8 @@ a.btn:hover {
 }
 
 .btn.danger {
-	background: rgba(255, 14, 58, 0.586);
-	border: 1px solid rgba(255, 91, 122, 0.35);
+	background: rgba(255, 58, 94, 0.175);
+	border: 1px solid rgba(255, 0, 47, 0.548);
 	color: var(--text);
 	box-shadow: none;
 }

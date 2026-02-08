@@ -343,10 +343,31 @@ export default function Home() {
           ) : (
             <>
               {masterSavedItems.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <ProviderRow title="All My Lists" logoUrl={null} items={masterSavedItems} onSeeAll={() => nav("/app/all")} />
-                </div>
-              )}
+  <div style={{ marginBottom: 16 }}>
+    <ProviderRow
+      title="All My Lists"
+      logoUrl={null}
+      items={masterSavedItems}
+      onSeeAll={() => nav("/app/all")}
+      variant="list"
+      itemAction={(it) => (
+        <button
+          className="btn danger"
+          style={{ padding: "8px 9px", borderRadius: 10 }}
+          onClick={() => {
+            if (!it.provider) return;
+            removeFromList(it.provider, it.watchmodeTitleId);
+          }}
+          disabled={!it.provider}
+          title={!it.provider ? "Missing provider" : "Remove from your list"}
+        >
+          – Remove
+        </button>
+      )}
+    />
+  </div>
+)}
+
 
               {rows.map((row) => {
                 const pKey = String(row.provider).toUpperCase();
