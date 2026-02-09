@@ -11,6 +11,8 @@ type RowItem = {
   // optional metadata (used by AllLists)
   provider?: string;
   genresStatus?: "PENDING" | "OK" | "NONE" | "ERROR";
+  genres?: string[];
+
 };
 
 export default function ProviderRow({
@@ -20,7 +22,8 @@ export default function ProviderRow({
   onSeeAll,
   onRemove,
   variant = "list",
-  itemAction
+  itemAction,
+  onPosterClick,
 }: {
   title: string;
   logoUrl?: string | null;
@@ -28,6 +31,7 @@ export default function ProviderRow({
   onSeeAll?: () => void;
   onRemove?: (id: number) => void;
   variant?: "list" | "suggested";
+  onPosterClick?: (item: RowItem) => void;
 
   /**
    * Optional per-item action renderer.
@@ -76,7 +80,8 @@ export default function ProviderRow({
             <TitleCard
               key={it.watchmodeTitleId}
               item={it}
-              action={action}
+              action={action}		
+			  onPosterClick={onPosterClick ? () => onPosterClick(it) : undefined}
             />
           );
         })}

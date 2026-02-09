@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import TitleCard from "../components/TitleCard";
 import { api } from "../api/client";
+import TitleModal from "../components/TitleModal";
+
 
 type SavedItem = {
   id: string;
@@ -36,6 +38,8 @@ export default function AllLists() {
   // provider chips with logos (multi-select)
   const [metaMap, setMetaMap] = useState<Record<string, ProviderMeta>>({});
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
+
+  const [modalItem, setModalItem] = useState<SavedItem | null>(null);
 
   // search rail
   const [q, setQ] = useState("");
@@ -373,9 +377,13 @@ export default function AllLists() {
                       type: r.type,
                       poster: r.poster ?? null,
                       watchUrl: r.watchUrl ?? null,
-                      provider: r.provider
+                      provider: r.provider,
+					  genres: r.genres,
+  					  genresStatus: r.genresStatus
                     }}
                     onWatchUrlResolved={(url) => applyWatchUrl(r.provider, r.watchmodeTitleId, url)}
+					onPosterClick={() => setModalItem(r)} // or it
+
                     action={savedItemActions(r)}
                   />
                 ))}
@@ -410,6 +418,8 @@ export default function AllLists() {
                   provider: it.provider
                 }}
                 onWatchUrlResolved={(url) => applyWatchUrl(it.provider, it.watchmodeTitleId, url)}
+				onPosterClick={() => setModalItem(it)} // for row item
+
                 action={savedItemActions(it)}
               />
             ))}
@@ -456,6 +466,8 @@ export default function AllLists() {
                             provider: it.provider
                           }}
                           onWatchUrlResolved={(url) => applyWatchUrl(it.provider, it.watchmodeTitleId, url)}
+						  onPosterClick={() => setModalItem(it)} // for row item
+
                           action={savedItemActions(it)}
                         />
                       ))}
@@ -467,6 +479,25 @@ export default function AllLists() {
           )}
         </div>
       </div>
+	  <TitleModal
+  open={!!modalItem}
+  item={
+    modalItem
+      ? {
+          watchmodeTitleId: modalItem.watchmodeTitleId,
+          title: modalItem.title,
+          type: modalItem.type,
+          poster: modalItem.poster,
+          watchUrl: modalItem.watchUrl ?? null,
+          provider: modalItem.provider,
+          genres: modalItem.genres,
+          genresStatus: modalItem.genresStatus,
+        }
+      : null
+  }
+  onClose={() => setModalItem(null)}
+/>
+
     </>
   );
 }

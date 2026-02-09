@@ -1,4 +1,4 @@
-// frontend/src/components/TitleCard.tsx
+//TitleCard.tsx
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
@@ -9,16 +9,22 @@ export type CardItem = {
   poster: string | null;
   watchUrl?: string | null;
   provider?: string;
+
+  // optional for future / AllLists
+  genres?: string[];
+  genresStatus?: "PENDING" | "OK" | "NONE" | "ERROR";
 };
 
 export default function TitleCard({
   item,
   action,
   onWatchUrlResolved,
+  onPosterClick,
 }: {
   item: CardItem;
   action?: React.ReactNode;
   onWatchUrlResolved?: (url: string | null) => void;
+  onPosterClick?: (item: CardItem) => void;
 }) {
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(item.watchUrl ?? null);
   const [opening, setOpening] = useState(false);
@@ -43,21 +49,14 @@ export default function TitleCard({
     lineHeight: "14px",
   };
 
-
   const handleOpen = async () => {
-    // If we already have the URL, let the <a> handle it (this handler won't be used).
     if (resolvedUrl) return;
-
-    // Need provider to resolve a Watchmode deep link.
     if (!item.provider) return;
-
     if (opening) return;
+
     setOpening(true);
 
-    // ✅ Open synchronously so browsers treat it as a user gesture.
     const win = window.open("about:blank", "_blank");
-
-    // If popup was blocked, stop here (don't navigate current tab).
     if (!win) {
       setOpening(false);
       alert("Popup blocked. Please allow popups for WatchGrid to use Open.");
@@ -65,8 +64,6 @@ export default function TitleCard({
     }
 
     try {
-      // While it's still about:blank (same-origin), we can safely detach opener.
-      // This gives us the security benefit of noopener without losing the handle.
       try {
         (win as any).opener = null;
       } catch {
@@ -81,7 +78,7 @@ export default function TitleCard({
 
       const url = res?.watchUrl ?? null;
 
-      // ✅ Tell parent so it can patch list/search rows (survives re-render + reload after DB persist)
+      // ✅ Tell parent so it can patch list/search rows
       onWatchUrlResolved?.(url);
 
       if (!url) {
@@ -89,10 +86,7 @@ export default function TitleCard({
         return;
       }
 
-      // Cache in local UI so next click uses a normal <a>.
       setResolvedUrl(url);
-
-      // Navigate the already-opened tab.
       win.location.href = url;
     } catch {
       try {
@@ -105,9 +99,40 @@ export default function TitleCard({
     }
   };
 
+  const posterClickable = !!onPosterClick;
+
   return (
     <div className="posterCard">
-      {item.poster ? <img className="posterImg" src={item.poster} alt={item.title} /> : <div className="posterImg" />}
+      {item.poster ? (
+        posterClickable ? (
+          <button
+            type="button"
+            onClick={() => onPosterClick?.(item)}
+            aria-label={`Open details for ${item.title}`}
+            style={{
+              all: "unset",
+              display: "block",
+              width: "100%",
+              cursor: "pointer",
+            }}
+          >
+            <img className="posterImg" src={item.poster} alt={item.title} />
+          </button>
+        ) : (
+          <img className="posterImg" src={item.poster} alt={item.title} />
+        )
+      ) : posterClickable ? (
+        <button
+          type="button"
+          onClick={() => onPosterClick?.(item)}
+          aria-label={`Open details for ${item.title}`}
+          style={{ all: "unset", display: "block", width: "100%", cursor: "pointer" }}
+        >
+          <div className="posterImg" />
+        </button>
+      ) : (
+        <div className="posterImg" />
+      )}
 
       <div className="posterBody">
         <p className="posterTitle" title={item.title}>
@@ -120,15 +145,8 @@ export default function TitleCard({
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-          {/* Best-case: real link = no blockers */}
           {resolvedUrl ? (
-            <a
-              className="btn secondary"
-              style={openStyle}
-              href={resolvedUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
+            <a className="btn secondary" style={openStyle} href={resolvedUrl} target="_blank" rel="noreferrer noopener">
               Open
             </a>
           ) : (

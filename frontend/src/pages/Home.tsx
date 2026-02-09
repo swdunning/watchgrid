@@ -5,6 +5,8 @@ import Header from "../components/Header";
 import ProviderRow from "../components/ProviderRow";
 import TitleCard from "../components/TitleCard";
 import { api } from "../api/client";
+import TitleModal from "../components/TitleModal";
+
 
 type RowItem = {
   watchmodeTitleId: number;
@@ -37,6 +39,9 @@ export default function Home() {
   const [meta, setMeta] = useState<Record<string, ProviderMeta>>({});
   const [err, setErr] = useState<string | null>(null);
   const [loadingHome, setLoadingHome] = useState(true);
+
+	const [modalItem, setModalItem] = useState<RowItem | null>(null);
+
 
   // Search
   const [q, setQ] = useState("");
@@ -320,7 +325,12 @@ const savedKeySet = useMemo(() => {
                   <TitleCard
                     key={`${r.provider ?? "X"}-${r.watchmodeTitleId}`}
                     item={r}
-                    onWatchUrlResolved={(id, url) => patchWatchUrl(r.provider, id, url)}
+                   onWatchUrlResolved={(url) => {
+					if (!url) return;
+					patchWatchUrl(r.provider, r.watchmodeTitleId, url);
+					}}
+					onPosterClick={() => setModalItem(r)}
+
                     action={(() => {
   const p = r.provider ? String(r.provider).toUpperCase() : "";
   const alreadyAdded = !!r.provider && savedKeySet.has(`${p}:${r.watchmodeTitleId}`);
@@ -366,6 +376,8 @@ const savedKeySet = useMemo(() => {
 					items={masterSavedItems}
 					onSeeAll={() => nav("/app/all")}
 					variant="list"
+					onPosterClick={(it) => setModalItem(it)}
+
 					itemAction={(it) => (
 						<button
 						className="btn danger"
@@ -410,6 +422,7 @@ const savedKeySet = useMemo(() => {
                         onSeeAll={() => nav(`/app/provider/${row.provider}`)}
                         onRemove={hasSaved ? (id) => removeFromList(row.provider, id) : undefined}
                         variant={hasSaved ? "list" : "suggested"}
+						onPosterClick={(it) => setModalItem(it)}
                       />
                     </div>
                   </div>
@@ -419,6 +432,30 @@ const savedKeySet = useMemo(() => {
           )}
         </div>
       </div>
+	  <TitleModal
+  open={!!modalItem}
+  item={modalItem}
+  onClose={() => setModalItem(null)}
+  action={
+    modalItem?.provider ? (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {/* Optional: you can add +Add here later if you want */}
+        <button
+          className="btn danger"
+          style={{ padding: "8px 9px", borderRadius: 10 }}
+          onClick={() => {
+            if (!modalItem.provider) return;
+            removeFromList(modalItem.provider, modalItem.watchmodeTitleId);
+            setModalItem(null);
+          }}
+        >
+          – Remove
+        </button>
+      </div>
+    ) : null
+  }
+/>
+
     </>
   );
 }

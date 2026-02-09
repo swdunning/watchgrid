@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import Header from "../components/Header";
 import TitleCard from "../components/TitleCard";
 import { api } from "../api/client";
+import TitleModal from "../components/TitleModal";
 
 type RowItem = {
   watchmodeTitleId: number;
@@ -45,6 +46,8 @@ export default function ProviderPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
+  const [modalItem, setModalItem] = useState<RowItem | null>(null);
+ 
 
   // Mode / genre filters
   const [mode, setMode] = useState<"all" | "shows" | "movies">("all");
@@ -460,6 +463,8 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                       key={`${provider}-${r.watchmodeTitleId}`}
                       item={r}
                       onWatchUrlResolved={(url) => applyWatchUrl(r.watchmodeTitleId, url)}
+					  onPosterClick={() => setModalItem(r)} // for search result
+
                       action={
                         <button
                           className={`btn ${alreadyAdded ? "secondary" : ""}`}
@@ -521,6 +526,8 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                           key={`${row.key}-${it.watchmodeTitleId}`}
                           item={it}
                           onWatchUrlResolved={(url) => applyWatchUrl(it.watchmodeTitleId, url)}
+						  onPosterClick={() => setModalItem(it)} // for row item
+
                           action={
                             isMyList ? (
                               <button
@@ -563,6 +570,12 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
           </div>
         )}
       </div>
+	  <TitleModal
+  open={!!modalItem}
+  item={modalItem}
+  onClose={() => setModalItem(null)}
+/>
+
     </>
   );
 }
