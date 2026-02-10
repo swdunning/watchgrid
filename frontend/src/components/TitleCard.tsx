@@ -15,6 +15,18 @@ export type CardItem = {
   genresStatus?: "PENDING" | "OK" | "NONE" | "ERROR";
 };
 
+const formatTypeLabel = (type: string) => {
+  const t = type.toLowerCase();
+
+  if (t.includes("tv")) return "Series";
+  if (t.includes("movie")) return "Movie";
+
+  // fallback: Title Case
+  return type
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
 export default function TitleCard({
   item,
   action,
@@ -139,10 +151,10 @@ export default function TitleCard({
           {item.title}
         </p>
 
-        <div className="badge">
-          {item.type}
-          {item.provider ? ` • ${item.provider}` : ""}
-        </div>
+		<div className="badge">
+			{formatTypeLabel(item.type)}
+			{item.provider ? ` • ${item.provider}` : ""}
+		</div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           {resolvedUrl ? (
