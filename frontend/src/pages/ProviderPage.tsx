@@ -364,6 +364,25 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const label = meta?.label || payload?.label || provider;
 
+  const hero = useMemo(() => {
+    const rows = payload?.rows || [];
+    if (!rows.length) return null;
+
+    // Prefer a "trending" row if one exists, otherwise first non-my_list row with items.
+    const trendingRow =
+      rows.find((r) => String(r.title).toLowerCase().includes("trending") && (r.items?.length ?? 0) > 0) ??
+      rows.find((r) => r.kind !== "my_list" && (r.items?.length ?? 0) > 0) ??
+      null;
+
+    if (!trendingRow) return null;
+
+    const it = trendingRow.items?.[0] ?? null;
+    if (!it) return null;
+
+    return { rowTitle: trendingRow.title, item: it };
+  }, [payload]);
+
+
   return (
     <>
       <Header
@@ -382,9 +401,98 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
             {meta?.logoUrl ? <img src={meta.logoUrl} alt="" style={{ width: 42, height: 42, borderRadius: 10 }} /> : null}
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0 }}>{label}</h1>
+			  
               <div className="muted">Browse and build your {label} list.</div>
+			  
             </div>
           </div>
+
+          {/* Hero: Trending (from existing row data, no extra calls) */}
+          {hero?.item ? (
+            <div
+              className="card"
+              style={{
+                marginTop: 12,
+                padding: 0,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "170px 1fr",
+                  gap: 14,
+                  alignItems: "stretch",
+                }}
+              >
+                <div style={{ padding: 12 }}>
+                  {hero.item.poster ? (
+                    <img
+                      src={hero.item.poster}
+                      alt=""
+                      style={{ width: 160, height: 240, objectFit: "cover", borderRadius: 14 }}
+                    />
+                  ) : (
+                    <div className="skel skelPoster" />
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    position: "relative",
+                    padding: "14px 14px 14px 0",
+                    minWidth: 0,
+                  }}
+                >
+                  {/* soft background using poster */}
+                  {hero.item.poster ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        backgroundImage: `linear-gradient(90deg, rgba(6,5,10,0.92), rgba(6,5,10,0.55)), url(${hero.item.poster})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                        filter: "blur(0px)",
+                        opacity: 0.9,
+                      }}
+                    />
+                  ) : null}
+
+                  <div style={{ position: "relative" }}>
+                    <div className="muted" style={{ fontWeight: 900, letterSpacing: 0.2 }}>
+                      Trending on {label}
+                    </div>
+
+                    <h2 style={{ margin: "6px 0 6px", maxWidth: 520 }}>
+                      {hero.item.title}
+                    </h2>
+
+                    <div className="badge" style={{ fontSize: 13 }}>
+                      {hero.item.type}
+                      {hero.item.provider ? ` • ${hero.item.provider}` : ""}
+                    </div>
+
+                    <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      {/* Reuse your existing TitleCard behavior by just showing the card in-place */}
+                      <button
+                        className="btn"
+                        style={{ padding: "10px 12px", borderRadius: 12 }}
+                        onClick={() => {
+                          // Jump the user down to the rail section
+                          document.getElementById("wgRowsStart")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      >
+                        Browse row →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* Provider-scoped search */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
@@ -417,7 +525,7 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
           {/* Genre selector */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
-            <div className="muted">Genre:</div>
+            <div className="muted">Select a Genre:</div>
             <select className="input" style={{ maxWidth: 320 }} value={genreId} onChange={(e) => setGenreId(e.target.value)}>
               <option value="all">All</option>
               {genres.map((g) => (
@@ -427,9 +535,7 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
               ))}
             </select>
 
-            <button className="btn secondary" onClick={loadGenreRows}>
-              Load genre rows
-            </button>
+            
           </div>
 
           {rateLimited && (
@@ -486,10 +592,34 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
           </div>
         </div>
 
-        {/* Rows */}
+		{/*Browse Titles button anchor */}	
+        <div id="wgRowsStart" />
+
+        {/* Rows - with loading rows skeleton shimmer*/}
         {loading ? (
-          <div className="card muted">Loading…</div>
-        ) : (
+		<div style={{ display: "grid", gap: 14 }}>
+			<div className="card">
+			<div className="skel skelText" style={{ width: 240, marginBottom: 10 }} />
+			<div className="skel skelText sm" style={{ width: 360 }} />
+			</div>
+
+			<div className="wgRow">
+			<div className="wgRowHeader">
+				<div className="wgRowTitleWrap">
+				<div className="skel skelText" style={{ width: 220 }} />
+				</div>
+				<div className="skel skelBtn" style={{ width: 120 }} />
+			</div>
+
+			<div className="rail">
+				{Array.from({ length: 6 }).map((_, i) => (
+				<div key={i} className="skel skelPoster" />
+				))}
+			</div>
+			</div>
+		</div>
+		) : (
+
           <div style={{ display: "grid", gap: 14 }}>
             {(payload?.rows || []).map((row) => {
               const isMyList = row.kind === "my_list";
@@ -559,7 +689,8 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
             {!payload?.includeGenres ? (
               <div className="card muted">
-                Genre rows are available — click <b>Load genre rows</b> above to fetch Comedy/Drama/Sci-fi/Action/Mystery/Documentary.
+                Click <b>Load genre rows</b> below to fetch Genre rows. Or select a Genre from the dropdown above.
+
                 <div style={{ marginTop: 10 }}>
                   <button className="btn secondary" onClick={loadGenreRows}>
                     Load genre rows

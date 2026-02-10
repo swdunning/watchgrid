@@ -365,8 +365,42 @@ const savedKeySet = useMemo(() => {
 
         <div style={{ marginTop: 18 }}>
           {loadingHome ? (
-            <div className="card muted">Loading your rows…</div>
-          ) : (
+			<div style={{ display: "grid", gap: 16 }}>
+				{/* All My Lists skeleton */}
+				<div className="wgRow">
+				<div className="wgRowHeader">
+					<div className="wgRowTitleWrap">
+					<div className="skel skelText" style={{ width: 180 }} />
+					</div>
+				</div>
+
+				<div className="rail">
+					{Array.from({ length: 6 }).map((_, i) => (
+					<div key={i} className="skel skelPoster" />
+					))}
+				</div>
+				</div>
+
+				{/* Provider rows skeletons */}
+				{Array.from({ length: 3 }).map((_, rowIdx) => (
+				<div key={rowIdx} className="wgRow">
+					<div className="wgRowHeader">
+					<div className="wgRowTitleWrap">
+						<div className="skel skelText" style={{ width: 220 }} />
+					</div>
+					<div className="skel skelBtn" style={{ width: 110 }} />
+					</div>
+
+					<div className="rail">
+					{Array.from({ length: 6 }).map((_, i) => (
+						<div key={i} className="skel skelPoster" />
+					))}
+					</div>
+				</div>
+				))}
+			</div>
+			) : (
+
             <>
               {masterSavedItems.length > 0 && (
 				<div style={{ marginBottom: 16 }}>
