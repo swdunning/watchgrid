@@ -36,6 +36,22 @@ type ProviderRowPayload = {
 type ProviderMeta = { provider: string; label: string; logoUrl: string | null };
 type Genre = { id: number; name: string };
 
+const normalizeTypeLabel = (t?: string | null) => {
+  const s = String(t ?? "").trim();
+  const lower = s.toLowerCase();
+
+  if (lower === "tv_series" || lower === "tv") return "Series";
+  if (lower === "movie") return "Movie";
+
+  // fallback: convert snake_case to Title Case
+  return s
+    ? s
+        .replace(/_/g, " ")
+        .replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
+    : "";
+};
+
+
 export default function ProviderPage() {
   const nav = useNavigate();
   const { provider: providerParam } = useParams();
@@ -398,7 +414,7 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
       <div className="page" style={{ display: "grid", gap: 14 }}>
         <div className="card">
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            {meta?.logoUrl ? <img src={meta.logoUrl} alt="" style={{ width: 42, height: 42, borderRadius: 10 }} /> : null}
+            {meta?.logoUrl ? <img src={meta.logoUrl} alt="" style={{ width: 56, height: 56, borderRadius: 10 }} /> : null}
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0 }}>{label}</h1>
 			  
@@ -471,7 +487,7 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                     </h2>
 
                     <div className="badge" style={{ fontSize: 13 }}>
-                      {hero.item.type}
+                      {normalizeTypeLabel(hero.item.type)}
                       {hero.item.provider ? ` • ${hero.item.provider}` : ""}
                     </div>
 

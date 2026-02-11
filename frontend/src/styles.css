@@ -157,8 +157,8 @@ body {
 }
 
 .wgRowLogo {
-	width: 42px;
-	height: 42px;
+	width: 54px;
+	height: 54px;
 	border-radius: 6px;
 }
 
@@ -175,7 +175,7 @@ body {
 	background: var(--wg-purple);
 	color: white;
 	padding: 8px 12px;
-	border-radius: 999px;
+	border-radius: 10px;
 	cursor: pointer;
 	font-weight: 700;
 	display: inline-flex;
@@ -370,7 +370,11 @@ a.btn:hover {
 .posterTitle {
 	margin: 0;
 	font-weight: 900;
-	font-size: 13px
+	font-size: 13px;
+
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .badge {
