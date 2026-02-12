@@ -1,3 +1,5 @@
+//watchmodeService.ts
+
 console.log("[watchmodeService] LOADED VERSION = 4.2.1-backoff-2s")
 
 import axios, { AxiosError } from "axios"
@@ -6,6 +8,12 @@ import { PROVIDERS, type ProviderKey, labelFor } from "../types"
 
 const BASE_URL = "https://api.watchmode.com/v1"
 const API_KEY = process.env.WATCHMODE_API_KEY
+
+function normalizeName(s: string) {
+	return String(s || "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "") // strip spaces, +, punctuation
+}
 
 function requireKey() {
 	if (!API_KEY) throw new Error("WATCHMODE_API_KEY missing in backend/.env")
@@ -118,7 +126,9 @@ export async function watchmodeResolveProviderMeta(provider: ProviderKey): Promi
 	sourceId: number | null
 	logoUrl: string | null
 }> {
-	const cacheKey = `wm:providerMeta:${provider}`
+	// ✅ bump key so we don't keep a bad "null logo/sourceId" cached for 7 days
+	const cacheKey = `wm:providerMeta:v2:${provider}`
+
 	const cached = await cacheGet<any>(cacheKey)
 	if (cached) return cached
 
@@ -131,7 +141,10 @@ export async function watchmodeResolveProviderMeta(provider: ProviderKey): Promi
 		return fallback
 	}
 
-	const match = sources.find((s) => def.watchmodeNames.some((n) => s.name.toLowerCase().includes(n.toLowerCase())))
+	const match = sources.find((s) => {
+		const sName = normalizeName(s.name)
+		return def.watchmodeNames.some((n) => sName.includes(normalizeName(n)))
+	})
 
 	const meta = {
 		provider,
@@ -243,7 +256,7 @@ export async function watchmodeListTitles(args: {
 		})
 
 		const titles = data?.titles ?? data ?? []
-		await cacheSet(cacheKey, titles, 60 * 60)
+		await cacheSet(cacheKey, titles, 6 * 60 * 60)
 		return titles
 	} catch (e: any) {
 		const status = getStatus(e)

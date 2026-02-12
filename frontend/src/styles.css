@@ -157,9 +157,20 @@ body {
 }
 
 .wgRowLogo {
-	width: 54px;
-	height: 54px;
-	border-radius: 6px;
+	width: 60px;
+	height: 60px;
+	border-radius: 10px;
+	object-fit: cover;
+	
+	border: 1px solid rgba(255, 255, 255, 0.341);
+	background: rgba(255, 255, 255, 0.04);
+	padding: 3px;
+}
+
+@media (hover: hover) {
+  .wgRowLogo:hover {
+    box-shadow: 0 0 14px var(--glow);
+  }
 }
 
 .wgRowTitle {
@@ -340,6 +351,59 @@ a.btn:hover {
 	padding-bottom: 8px;
 }
 
+
+/* ===== Cinematic Hero Banner (ProviderPage) ===== */
+.heroBanner {
+	position: relative;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	background: rgba(255, 255, 255, 0.03);
+	border-radius: 16px;
+	overflow: hidden;
+
+	/* depth + subtle purple glow */
+	box-shadow:
+		0 18px 50px rgba(0, 0, 0, 0.45),
+		0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+		0 0 36px var(--glow);
+	animation: heroIn 320ms ease-out both;
+}
+
+/* blurred poster layer */
+.heroBackdrop {
+	position: absolute;
+	inset: -24px;
+	/* overscan so blur doesn't show edges */
+	background-size: cover;
+	background-position: center;
+	filter: blur(6px);
+	opacity: 0.55;
+	transform: scale(1.06);
+}
+
+/* super subtle grain so it feels like a hero */
+.heroGrain {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	opacity: 0.08;
+	background-image:
+		repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0px, rgba(255, 255, 255, 0.00) 2px, rgba(255, 255, 255, 0.00) 4px),
+		repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0px, rgba(255, 255, 255, 0.00) 3px, rgba(255, 255, 255, 0.00) 6px);
+	mix-blend-mode: overlay;
+}
+
+@keyframes heroIn {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
 .posterCard {
 	min-width: 160px;
 	width: 160px;
@@ -351,9 +415,17 @@ a.btn:hover {
 }
 
 .posterCard:hover {
-	transform: translateY(-3px);
+	transform: translateY(-4px);
 	border-color: rgba(167, 139, 250, 0.35);
-	box-shadow: 0 16px 42px rgba(0, 0, 0, 0.45), 0 0 30px rgba(109, 40, 217, 0.16);
+	box-shadow: 
+	0 16px 42px rgba(0, 0, 0, 0.45), 
+	0 0 30px rgba(109, 40, 217, 0.16),
+	0 0 24px var(--glow),
+}
+
+/* Subtle press effect */
+.posterCard:active {
+	transform: translateY(-1px) scale(0.99);
 }
 
 .posterImg {
@@ -361,6 +433,13 @@ a.btn:hover {
 	aspect-ratio: 2/3;
 	object-fit: cover;
 	background: rgba(255, 255, 255, 0.06);
+	transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+}
+
+@media (hover: hover) {
+	.posterCard:hover .posterImg {
+		transform: scale(1.04);
+	}
 }
 
 .posterBody {

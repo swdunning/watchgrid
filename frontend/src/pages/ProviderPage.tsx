@@ -414,7 +414,7 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
       <div className="page" style={{ display: "grid", gap: 14 }}>
         <div className="card">
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            {meta?.logoUrl ? <img src={meta.logoUrl} alt="" style={{ width: 56, height: 56, borderRadius: 10 }} /> : null}
+            {meta?.logoUrl ? <img src={meta.logoUrl} alt="" style={{ width: 60, height: 60, borderRadius: 10 }} /> : null}
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0 }}>{label}</h1>
 			  
@@ -426,13 +426,13 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
           {/* Hero: Trending (from existing row data, no extra calls) */}
           {hero?.item ? (
             <div
-              className="card"
+              className="card heroBanner"
               style={{
                 marginTop: 12,
                 padding: 0,
                 overflow: "hidden",
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(255,255,255,0.03)",
+                // border: "1px solid rgba(255,255,255,0.10)",
+                // background: "rgba(255,255,255,0.03)",
               }}
             >
               <div
@@ -443,12 +443,21 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                   alignItems: "stretch",
                 }}
               >
-                <div style={{ padding: 12 }}>
+                <div style={{ padding: 12, position: "relative", zIndex: 2 }}>
+
                   {hero.item.poster ? (
                     <img
                       src={hero.item.poster}
                       alt=""
-                      style={{ width: 160, height: 240, objectFit: "cover", borderRadius: 14 }}
+						style={{
+						width: 160,
+						height: 240,
+						objectFit: "cover",
+						borderRadius: 14,
+						border: "2px solid rgba(255,255,255,0.10)",
+						boxShadow: "0 18px 50px rgba(0, 0, 0, 0.85)"
+						}}
+
                     />
                   ) : (
                     <div className="skel skelPoster" />
@@ -457,25 +466,22 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
                 <div
                   style={{
-                    position: "relative",
+
                     padding: "14px 14px 14px 0",
                     minWidth: 0,
                   }}
                 >
                   {/* soft background using poster */}
-                  {hero.item.poster ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        backgroundImage: `linear-gradient(90deg, rgba(6,5,10,0.92), rgba(6,5,10,0.55)), url(${hero.item.poster})`,
-                        backgroundSize: "cover",
-                        backgroundPosition: "center",
-                        filter: "blur(0px)",
-                        opacity: 0.9,
-                      }}
-                    />
-                  ) : null}
+				{hero.item.poster ? (
+				<>
+					<div
+					className="heroBackdrop"
+					style={{ backgroundImage: `url(${hero.item.poster})` }}
+					/>
+					<div className="heroGrain" />
+				</>
+				) : null}
+
 
                   <div style={{ position: "relative" }}>
                     <div className="muted" style={{ fontWeight: 900, letterSpacing: 0.2 }}>
@@ -491,19 +497,67 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                       {hero.item.provider ? ` • ${hero.item.provider}` : ""}
                     </div>
 
-                    <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {/* Reuse your existing TitleCard behavior by just showing the card in-place */}
-                      <button
-                        className="btn"
-                        style={{ padding: "10px 12px", borderRadius: 12 }}
-                        onClick={() => {
-                          // Jump the user down to the rail section
-                          document.getElementById("wgRowsStart")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                        }}
-                      >
-                        Browse row →
-                      </button>
-                    </div>
+<div
+  style={{
+    marginTop: 18,
+    display: "flex",
+    gap: 14,
+    flexWrap: "wrap",
+    alignItems: "center",
+  }}
+>
+  {/* Browse CTA */}
+  <button
+    className="btn"
+    style={{
+      padding: "12px 18px",
+      borderRadius: 14,
+      fontSize: 14,
+      fontWeight: 700,
+      boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+    }}
+    onClick={() => {
+      document.getElementById("wgRowsStart")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }}
+  >
+    Browse Titles →
+  </button>
+
+  {/* Hero Add Button */}
+  {hero?.item && !myListIds.has(hero.item.watchmodeTitleId) ? (
+    <button
+      className="btn"
+      style={{
+        padding: "12px 18px",
+        borderRadius: 14,
+        fontSize: 14,
+        fontWeight: 700,
+        background: "var(--purple)",
+        boxShadow: "0 8px 24px rgba(109,40,217,0.45)",
+      }}
+      onClick={() => addToList(hero.item)}
+    >
+      + Add to List
+    </button>
+  ) : hero?.item ? (
+    <button
+      className="btn secondary"
+      style={{
+        padding: "12px 18px",
+        borderRadius: 14,
+        fontSize: 15,
+        fontWeight: 900,
+      }}
+      disabled
+    >
+      ✓ Added
+    </button>
+  ) : null}
+</div>
+
                   </div>
                 </div>
               </div>

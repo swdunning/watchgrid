@@ -1,3 +1,5 @@
+//index.ts
+
 export type ProviderKey = "NETFLIX" | "HULU" | "PRIME" | "MAX" | "DISNEY" | "APPLETV" | "PARAMOUNT" | "PEACOCK"
 
 export const PROVIDERS: { key: ProviderKey; label: string; watchmodeNames: string[] }[] = [
@@ -14,7 +16,7 @@ export const PROVIDERS: { key: ProviderKey; label: string; watchmodeNames: strin
 	{ key: "DISNEY", label: "Disney+", watchmodeNames: ["Disney+", "Disney Plus"] },
 
 	// Apple TV+ naming varies a LOT
-	{ key: "APPLETV", label: "Apple TV+", watchmodeNames: ["Apple TV+", "Apple TV Plus", "Apple TV"] },
+	{ key: "APPLETV", label: "Apple TV+", watchmodeNames: ["AppleTV", "Apple TV+", "Apple TV Plus", "Apple TV"] },
 
 	// Paramount naming varies
 	{ key: "PARAMOUNT", label: "Paramount+", watchmodeNames: ["Paramount+", "Paramount Plus"] },
