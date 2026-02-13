@@ -380,23 +380,37 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const label = meta?.label || payload?.label || provider;
 
-  const hero = useMemo(() => {
-    const rows = payload?.rows || [];
-    if (!rows.length) return null;
+const trendingItems = useMemo(() => {
+  const rows = payload?.rows || [];
+  if (!rows.length) return [];
 
-    // Prefer a "trending" row if one exists, otherwise first non-my_list row with items.
-    const trendingRow =
-      rows.find((r) => String(r.title).toLowerCase().includes("trending") && (r.items?.length ?? 0) > 0) ??
-      rows.find((r) => r.kind !== "my_list" && (r.items?.length ?? 0) > 0) ??
-      null;
+  const trendingRow =
+    rows.find((r) => String(r.title).toLowerCase().includes("trending") && (r.items?.length ?? 0) > 0) ??
+    rows.find((r) => r.kind !== "my_list" && (r.items?.length ?? 0) > 0) ??
+    null;
 
-    if (!trendingRow) return null;
+  if (!trendingRow) return [];
 
-    const it = trendingRow.items?.[0] ?? null;
-    if (!it) return null;
+  return (trendingRow.items || []).slice(0, 3);
+}, [payload]);
 
-    return { rowTitle: trendingRow.title, item: it };
-  }, [payload]);
+const [isHeroPaused, setIsHeroPaused] = useState(false);
+
+const [heroIndex, setHeroIndex] = useState(0);
+
+useEffect(() => {
+  if (!trendingItems.length || isHeroPaused) return;
+
+  const id = setInterval(() => {
+    setHeroIndex((prev) => (prev + 1) % trendingItems.length);
+  }, 10000); //10 Seconds
+
+  return () => clearInterval(id);
+}, [trendingItems, isHeroPaused]);
+
+
+const heroItem = trendingItems[heroIndex] ?? null;
+
 
 
   return (
@@ -424,7 +438,8 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
           </div>
 
           {/* Hero: Trending (from existing row data, no extra calls) */}
-          {hero?.item ? (
+          {heroItem ? (
+
             <div
               className="card heroBanner"
               style={{
@@ -434,6 +449,8 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                 // border: "1px solid rgba(255,255,255,0.10)",
                 // background: "rgba(255,255,255,0.03)",
               }}
+			  onMouseEnter={() => setIsHeroPaused(true)}
+			onMouseLeave={() => setIsHeroPaused(false)}
             >
               <div
                 style={{
@@ -443,11 +460,19 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                   alignItems: "stretch",
                 }}
               >
-                <div style={{ padding: 12, position: "relative", zIndex: 2 }}>
+                <div
+					key={`poster-${heroItem.watchmodeTitleId}`}
+					style={{
+						padding: 12,
+						zIndex: 2,
+						animation: "heroFade 2000ms ease"
+					}}
+					>
 
-                  {hero.item.poster ? (
+
+                  {heroItem.poster ? (
                     <img
-                      src={hero.item.poster}
+                      src={heroItem.poster}
                       alt=""
 						style={{
 						width: 160,
@@ -472,100 +497,170 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
                   }}
                 >
                   {/* soft background using poster */}
-				{hero.item.poster ? (
+				{heroItem.poster ? (
 				<>
 					<div
 					className="heroBackdrop"
-					style={{ backgroundImage: `url(${hero.item.poster})` }}
+					style={{ backgroundImage: `url(${heroItem.poster})` }}
 					/>
 					<div className="heroGrain" />
 				</>
 				) : null}
 
 
-                  <div style={{ position: "relative" }}>
+				<div
+				key={heroItem.watchmodeTitleId}
+				style={{
+					position: "relative",
+					animation: "heroFade 2000ms ease"
+				}}
+				>
+
                     <div className="muted" style={{ fontWeight: 900, letterSpacing: 0.2 }}>
                       Trending on {label}
                     </div>
 
                     <h2 style={{ margin: "6px 0 6px", maxWidth: 520 }}>
-                      {hero.item.title}
+                      {heroItem.title}
                     </h2>
 
                     <div className="badge" style={{ fontSize: 13 }}>
-                      {normalizeTypeLabel(hero.item.type)}
-                      {hero.item.provider ? ` • ${hero.item.provider}` : ""}
+                      {normalizeTypeLabel(heroItem.type)}
+                      {heroItem.provider ? ` • ${heroItem.provider}` : ""}
                     </div>
 
+					<div
+					style={{
+						marginTop: 18,
+						display: "flex",
+						gap: 14,
+						flexWrap: "wrap",
+						alignItems: "center",
+					}}
+					>
+					{/* Browse CTA */}
+					<button
+						className="btn"
+						style={{
+						padding: "12px 18px",
+						borderRadius: 14,
+						fontSize: 14,
+						fontWeight: 700,
+						boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
+						}}
+						onClick={() => {
+						document.getElementById("wgRowsStart")?.scrollIntoView({
+							behavior: "smooth",
+							block: "start",
+						});
+						}}
+					>
+						Browse Titles →
+					</button>
+
+					{/* Hero Add Button */}
+					{heroItem && !myListIds.has(heroItem.watchmodeTitleId) ? (
+						<button
+						className="btn"
+						style={{
+							padding: "12px 18px",
+							borderRadius: 14,
+							fontSize: 14,
+							fontWeight: 700,
+							background: "var(--purple)",
+							boxShadow: "0 8px 24px rgba(109,40,217,0.45)",
+						}}
+						onClick={() => addToList(heroItem)}
+						>
+						+ Add to List
+						</button>
+					) : heroItem ? (
+
+						<button
+						className="btn secondary"
+						style={{
+							padding: "12px 18px",
+							borderRadius: 14,
+							fontSize: 15,
+							fontWeight: 900,
+						}}
+						disabled
+						>
+						✓ Added
+						</button>
+					) : null}
+					</div>
 <div
   style={{
-    marginTop: 18,
     display: "flex",
-    gap: 14,
-    flexWrap: "wrap",
-    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 62
   }}
 >
-  {/* Browse CTA */}
-  <button
-    className="btn"
+  <div
     style={{
-      padding: "12px 18px",
-      borderRadius: 14,
-      fontSize: 14,
-      fontWeight: 700,
-      boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
-    }}
-    onClick={() => {
-      document.getElementById("wgRowsStart")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      display: "flex",
+      alignItems: "center",
+      gap: 14,
+      padding: "8px 16px",
+      borderRadius: 999,
+      background: "rgba(0, 0, 0, 0.69)",
+      border: "1px solid rgba(255, 255, 255, 0.33)",
+      backdropFilter: "blur(6px)"
     }}
   >
-    Browse Titles →
-  </button>
+ 
+ <button
+  className="heroArrowBtn"
+  type="button"
+  onClick={() => setHeroIndex((i) => (i - 1 + trendingItems.length) % trendingItems.length)}
+  aria-label="Previous"
+>
+<span className="heroArrow left">❮</span>
+</button>
+<div style={{ marginTop: 0, display: "flex", gap: 6 }}>
+  {trendingItems.map((_, i) => (
+    <div
+      key={i}
+      onClick={() => setHeroIndex(i)}
+      style={{
+        width: 8,
+        height: 8,
+        borderRadius: 999,
+        cursor: "pointer",
+        transition: "all 200ms ease",
+        background:
+          i === heroIndex
+            ? "var(--wg-purple)"
+            : "rgba(255, 255, 255, 0.5)",
+        transform: i === heroIndex ? "scale(1.2)" : "scale(1)"
+      }}
+    />
+  ))}
+</div>
 
-  {/* Hero Add Button */}
-  {hero?.item && !myListIds.has(hero.item.watchmodeTitleId) ? (
-    <button
-      className="btn"
-      style={{
-        padding: "12px 18px",
-        borderRadius: 14,
-        fontSize: 14,
-        fontWeight: 700,
-        background: "var(--purple)",
-        boxShadow: "0 8px 24px rgba(109,40,217,0.45)",
-      }}
-      onClick={() => addToList(hero.item)}
-    >
-      + Add to List
-    </button>
-  ) : hero?.item ? (
-    <button
-      className="btn secondary"
-      style={{
-        padding: "12px 18px",
-        borderRadius: 14,
-        fontSize: 15,
-        fontWeight: 900,
-      }}
-      disabled
-    >
-      ✓ Added
-    </button>
-  ) : null}
+	<button
+		className="heroArrowBtn"
+		type="button"
+		onClick={() => setHeroIndex((i) => (i + 1) % trendingItems.length)}
+		aria-label="Next"
+	>
+		<span className="heroArrow right">❯</span>
+	</button>
+</div>
 </div>
 
                   </div>
                 </div>
               </div>
             </div>
+			
           ) : null}
 
+
+
           {/* Provider-scoped search */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 30 }}>
             <input
               className="input"
               style={{ maxWidth: 560 }}
@@ -609,7 +704,9 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
           </div>
 
           {rateLimited && (
-            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
+            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)", }}
+			
+			>
               <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode. Try again in a few minutes.</div>
             </div>
           )}
