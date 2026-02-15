@@ -34,6 +34,29 @@ async function resolveWatchUrl(provider: string, watchmodeTitleId: number): Prom
 	}
 }
 
+async function ensureTitleRow(args: { watchmodeTitleId: number; title: string; type: string; poster?: string | null }) {
+	const { watchmodeTitleId, title, type, poster } = args
+
+	// Create the Title row if it doesn't exist.
+	// If it does exist, keep it updated with the best-known basics.
+	await prisma.title.upsert({
+		where: { watchmodeTitleId },
+		create: {
+			watchmodeTitleId,
+			title,
+			type,
+			poster: poster ?? null,
+			metaStatus: "PENDING",
+		},
+		update: {
+			// keep basics current; do NOT touch year/runtime/seasons/description here
+			title,
+			type,
+			...(poster ? { poster } : {}), // ✅ don't clobber poster with null
+		},
+	})
+}
+
 router.get("/lists", requireAuth, async (req, res) => {
 	const userId = (req as any).userId as string
 
@@ -88,6 +111,13 @@ router.post("/lists/add", requireAuth, async (req, res) => {
 		genres = []
 		genresStatus = "ERROR"
 	}
+
+	await ensureTitleRow({
+		watchmodeTitleId,
+		title,
+		type,
+		poster,
+	})
 
 	// IMPORTANT:
 	// - Never overwrite an existing watchUrl with null

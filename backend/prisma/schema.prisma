@@ -14,6 +14,12 @@ enum GenresStatus {
     ERROR
 }
 
+enum TitleMetaStatus {
+    PENDING
+    OK
+    ERROR
+}
+
 model User {
     id           String         @id @default(cuid())
     email        String         @unique
@@ -49,9 +55,38 @@ model SavedItem {
     genresStatus      GenresStatus @default(PENDING)
     genresAttemptedAt DateTime?
 
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    user      User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+    titleMeta Title @relation(fields: [watchmodeTitleId], references: [watchmodeTitleId])
 
     @@unique([userId, provider, watchmodeTitleId])
+}
+
+model Title {
+    // Shared/global key
+    watchmodeTitleId Int @id
+
+    // Core identity
+    title  String
+    type   String
+    poster String?
+
+    // Extra metadata for the modal (optional, filled by ensureMetadata)
+    year           Int?
+    runtimeMinutes Int?
+    seasons        Int?
+    description    String?
+
+    // Metadata bookkeeping
+    metaStatus    TitleMetaStatus @default(PENDING)
+    lastFetchedAt DateTime?
+    createdAt     DateTime        @default(now())
+    updatedAt     DateTime        @updatedAt
+
+    // Relation back to user items (optional but useful)
+    savedItems SavedItem[]
+
+    @@index([metaStatus])
+    @@index([lastFetchedAt])
 }
 
 model CacheEntry {

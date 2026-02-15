@@ -1,5 +1,8 @@
+//index.ts
+
 import "dotenv/config"
 import accountRoutes from "./routes/account"
+import titlesRoutes from "./routes/titles"
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser"
@@ -20,6 +23,7 @@ app.use(express.json())
 app.use(cookieParser())
 app.use("/api", providerRowsRoutes)
 app.use("/api", accountRoutes)
+app.use("/api", titlesRoutes)
 
 app.get("/health", (_req, res) => res.json({ ok: true }))
 
