@@ -36,6 +36,8 @@ export default function Home() {
   const [rows, setRows] = useState<HomeRow[]>([]);
   const [masterSavedItems, setMasterSavedItems] = useState<RowItem[]>([]);
   const [rateLimited, setRateLimited] = useState(false);
+  const [popularRateLimitedProviders, setPopularRateLimitedProviders] = useState<string[]>([]);
+
   const [meta, setMeta] = useState<Record<string, ProviderMeta>>({});
   const [err, setErr] = useState<string | null>(null);
   const [loadingHome, setLoadingHome] = useState(true);
@@ -53,15 +55,19 @@ export default function Home() {
     setLoadingHome(true);
     setErr(null);
     try {
-      const data = await api<{
-        rows: HomeRow[];
-        masterSavedItems?: RowItem[];
-        rateLimited?: boolean;
-      }>("/api/home");
+	const data = await api<{
+		rows: (HomeRow & { popularRateLimited?: boolean })[];
+		masterSavedItems?: RowItem[];
+		rateLimited?: boolean;
+		popularRateLimitedProviders?: string[];
+	}>("/api/home");
 
-      setRows(data.rows || []);
-      setMasterSavedItems(data.masterSavedItems || []);
-      setRateLimited(!!data.rateLimited);
+
+    setRows(data.rows || []);
+	setMasterSavedItems(data.masterSavedItems || []);
+	setRateLimited(!!data.rateLimited);
+	setPopularRateLimitedProviders((data.popularRateLimitedProviders || []).map((p) => String(p).toUpperCase()));
+
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load home");
     } finally {
@@ -298,12 +304,21 @@ const savedKeySet = useMemo(() => {
             </button>
           </div>
 
-          {rateLimited && (
-            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
-              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode.</div>
-              <div className="muted" style={{ marginTop: 4 }}>Some rows may load slowly. Try again in a few minutes.</div>
-            </div>
-          )}
+          {(rateLimited || popularRateLimitedProviders.length > 0) && (
+  <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
+    <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode.</div>
+    <div className="muted" style={{ marginTop: 4 }}>
+      Some “Popular” rows may appear blank for ~30 seconds. Refresh after a moment.
+    </div>
+
+    {popularRateLimitedProviders.length > 0 ? (
+      <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+        Affected: {popularRateLimitedProviders.join(", ")}
+      </div>
+    ) : null}
+  </div>
+)}
+
 
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
 
@@ -466,29 +481,36 @@ const savedKeySet = useMemo(() => {
           )}
         </div>
       </div>
-	  <TitleModal
-  open={!!modalItem}
-  item={modalItem}
-  onClose={() => setModalItem(null)}
-  action={
-    modalItem?.provider ? (
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {/* Optional: you can add +Add here later if you want */}
-        <button
-          className="btn danger"
-          style={{ padding: "8px 9px", borderRadius: 10 }}
-          onClick={() => {
-            if (!modalItem.provider) return;
-            removeFromList(modalItem.provider, modalItem.watchmodeTitleId);
-            setModalItem(null);
-          }}
-        >
-          – Remove
-        </button>
-      </div>
-    ) : null
-  }
-/>
+	 
+	{(() => {
+  const modalProvider = modalItem?.provider ? String(modalItem.provider).toUpperCase() : "";
+  const modalKey =
+    modalItem?.watchmodeTitleId && modalProvider ? `${modalProvider}:${modalItem.watchmodeTitleId}` : "";
+  const modalIsSaved = !!modalKey && savedKeySet.has(modalKey);
+
+  return (
+    <TitleModal
+      open={!!modalItem}
+      item={modalItem}
+      onClose={() => setModalItem(null)}
+      onAdd={
+        modalItem && modalItem.provider && !modalIsSaved
+          ? () => addToList(modalProvider, modalItem)
+          : undefined
+      }
+      onRemove={
+        modalItem && modalItem.provider && modalIsSaved
+          ? () => {
+              removeFromList(modalProvider, modalItem.watchmodeTitleId);
+              setModalItem(null);
+            }
+          : undefined
+      }
+    />
+  );
+})()}
+
+
 
     </>
   );

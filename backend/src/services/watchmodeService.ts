@@ -224,19 +224,35 @@ export async function watchmodeListTitles(args: {
 	genreIds?: number[]
 	types?: "movie" | "tv_series"
 }) {
+	const res = await watchmodeListTitlesResult(args)
+	return res.titles
+}
+
+export type WatchmodeListTitlesResult = {
+	titles: any[]
+	ok: boolean
+	status?: number
+	rateLimited: boolean
+}
+
+export async function watchmodeListTitlesResult(args: {
+	provider: ProviderKey
+	sortBy: "popularity_desc" | "release_date_desc"
+	limit?: number
+	page?: number
+	releaseDateStart?: string
+	releaseDateEnd?: string
+	genreIds?: number[]
+	types?: "movie" | "tv_series"
+}): Promise<WatchmodeListTitlesResult> {
 	requireKey()
 
 	const sourceId = await watchmodeResolveSourceId(args.provider)
-	if (!sourceId) return []
+	if (!sourceId) return { titles: [], ok: true, rateLimited: false } // no source id = just empty, but not an error
 
 	const limit = args.limit ?? 24
 	const page = args.page ?? 1
 	const genres = args.genreIds && args.genreIds.length ? args.genreIds.join(",") : ""
-	const types = args.types ?? ""
-
-	const cacheKey = `wm:list:${args.provider}:${args.sortBy}:${page}:${limit}:${args.releaseDateStart ?? ""}:${args.releaseDateEnd ?? ""}:g=${genres}:t=${types}`
-	const cached = await cacheGet<any[]>(cacheKey)
-	if (cached) return cached
 
 	try {
 		const data = await axiosGetWithRetry<any>(`${BASE_URL}/list-titles/`, {
@@ -256,11 +272,32 @@ export async function watchmodeListTitles(args: {
 		})
 
 		const titles = data?.titles ?? data ?? []
-		await cacheSet(cacheKey, titles, 6 * 60 * 60)
-		return titles
+		return { titles, ok: true, rateLimited: false }
 	} catch (e: any) {
 		const status = getStatus(e)
-		console.warn(`[watchmodeListTitles] failed provider=${args.provider} status=${status ?? "?"}`)
-		return []
+		const rateLimited = status === 429
+		console.warn(`[watchmodeListTitlesResult] failed provider=${args.provider} status=${status ?? "?"}`)
+		return { titles: [], ok: false, status, rateLimited }
+	}
+}
+
+export async function watchmodeGetTitleDetails(titleId: number) {
+	requireKey()
+
+	const cacheKey = `wm:titleDetails:${titleId}`
+	const cached = await cacheGet<any>(cacheKey)
+	if (cached) return cached
+
+	try {
+		const data = await axiosGetWithRetry<any>(`${BASE_URL}/title/${titleId}/details/`, {
+			params: { apiKey: API_KEY },
+			timeout: 15000,
+		})
+
+		await cacheSet(cacheKey, data, 24 * 60 * 60) // cache 24h
+		return data
+	} catch (e: any) {
+		console.warn("[watchmodeGetTitleDetails] failed:", getStatus(e) ?? e?.message ?? e)
+		return null
 	}
 }

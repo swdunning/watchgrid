@@ -1,9 +1,10 @@
+// providerRows.ts
 import { Router } from "express"
 import { prisma } from "../prisma"
 import { requireAuth } from "../auth/authMiddleware"
 import { PROVIDERS, type ProviderKey, labelFor } from "../types"
 import { cacheGet, cacheSet } from "../services/cacheService"
-import { watchmodeGetGenres, watchmodeListTitles, watchmodeWasRateLimitedRecently } from "../services/watchmodeService"
+import { watchmodeGetGenres, watchmodeListTitlesResult, watchmodeWasRateLimitedRecently } from "../services/watchmodeService"
 import { tmdbPosterUrl } from "../services/tmdbService"
 
 const router = Router()
@@ -91,6 +92,16 @@ async function getCuratedGenreIds() {
 }
 
 /**
+ * Cache policy:
+ * - Normal payload TTL: 10 minutes
+ * - If rate-limited AND any non-my_list row is empty: short TTL (30s) so we retry soon
+ */
+function computePayloadTtlSeconds(payload: any, rateLimitedNow: boolean) {
+	const hasEmptyNonListRow = (payload?.rows || []).some((r: any) => r.kind !== "my_list" && (r.items?.length ?? 0) === 0)
+	return rateLimitedNow && hasEmptyNonListRow ? 30 : 600
+}
+
+/**
  * GET /api/provider/:provider/rows
  * mode=all|shows|movies
  * genreId=all|<number>
@@ -122,7 +133,6 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 	const maxTs = agg._max.createdAt ? String(agg._max.createdAt.getTime()) : "0"
 	const listSig = `${agg._count._all}:${maxTs}`
 
-	// ✅ Provider rows payload cache (10 minutes) — keyed by listSig so My List stays fresh
 	const payloadCacheKey = `rows:${userId}:${provider}:${mode}:g=${genreIdRaw}:ig=${includeGenres ? "1" : "0"}:ls=${listSig}`
 	const cached = await cacheGet<any>(payloadCacheKey)
 	if (cached) {
@@ -148,7 +158,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 
 	// If specific genre selected -> 3 rows
 	if (genreId && Number.isFinite(genreId)) {
-		const tv = await watchmodeListTitles({
+		const tvRes = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "popularity_desc",
 			limit: LIMIT,
@@ -157,7 +167,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 			genreIds: [genreId],
 		})
 
-		const movies = await watchmodeListTitles({
+		const moviesRes = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "popularity_desc",
 			limit: LIMIT,
@@ -165,6 +175,9 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 			types: "movie",
 			genreIds: [genreId],
 		})
+
+		const tv = tvRes.titles
+		const movies = moviesRes.titles
 
 		const payload = {
 			provider,
@@ -188,7 +201,10 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 			],
 		}
 
-		await cacheSet(payloadCacheKey, payload, 600)
+		const rateLimitedNow = tvRes.rateLimited || moviesRes.rateLimited || watchmodeWasRateLimitedRecently()
+		const ttl = computePayloadTtlSeconds(payload, rateLimitedNow)
+
+		await cacheSet(payloadCacheKey, payload, ttl)
 		return res.json(payload)
 	}
 
@@ -209,15 +225,19 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		items: myListItems,
 	})
 
+	let rateLimitedNow = watchmodeWasRateLimitedRecently()
+
 	if (mode !== "movies") {
-		const tvPopular = await watchmodeListTitles({
+		const tvPopularRes = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "popularity_desc",
 			limit: LIMIT,
 			page: 1,
 			types: "tv_series",
 		})
+		rateLimitedNow = rateLimitedNow || tvPopularRes.rateLimited
 
+		const tvPopular = tvPopularRes.titles
 		rows.push({
 			key: "popular_tv",
 			kind: "popular_tv",
@@ -229,14 +249,16 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 	}
 
 	if (mode !== "shows") {
-		const moviePopular = await watchmodeListTitles({
+		const moviePopularRes = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "popularity_desc",
 			limit: LIMIT,
 			page: 1,
 			types: "movie",
 		})
+		rateLimitedNow = rateLimitedNow || moviePopularRes.rateLimited
 
+		const moviePopular = moviePopularRes.titles
 		rows.push({
 			key: "popular_movies",
 			kind: "popular_movies",
@@ -247,7 +269,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		})
 	}
 
-	const newOn = await watchmodeListTitles({
+	const newOnRes = await watchmodeListTitlesResult({
 		provider,
 		sortBy: "release_date_desc",
 		limit: LIMIT,
@@ -256,7 +278,9 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		releaseDateEnd: fmt(now),
 		...(typesForMode ? { types: typesForMode } : {}),
 	})
+	rateLimitedNow = rateLimitedNow || newOnRes.rateLimited
 
+	const newOn = newOnRes.titles
 	rows.push({
 		key: "new",
 		kind: "new",
@@ -279,7 +303,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		].filter((g) => !!g.id)
 
 		const genreRows = await asyncPool(2, genreDefs, async (g) => {
-			const titles = await watchmodeListTitles({
+			const titlesRes = await watchmodeListTitlesResult({
 				provider,
 				sortBy: "popularity_desc",
 				limit: LIMIT,
@@ -288,6 +312,10 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 				...(typesForMode ? { types: typesForMode } : {}),
 			})
 
+			// If any of these hit 429, treat whole payload as rate-limited for TTL purposes
+			rateLimitedNow = rateLimitedNow || titlesRes.rateLimited
+
+			const titles = titlesRes.titles
 			return {
 				key: g.key,
 				kind: "genre",
@@ -312,7 +340,9 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		rows,
 	}
 
-	await cacheSet(payloadCacheKey, payload, 600)
+	const ttl = computePayloadTtlSeconds(payload, rateLimitedNow)
+	await cacheSet(payloadCacheKey, payload, ttl)
+
 	return res.json(payload)
 })
 
@@ -341,14 +371,14 @@ router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 	const yearAgo = new Date(now)
 	yearAgo.setFullYear(now.getFullYear() - 1)
 
-	let titles: any[] = []
+	let result: { titles: any[]; rateLimited: boolean } | null = null
 
 	if (kind === "popular_tv") {
-		titles = await watchmodeListTitles({ provider, sortBy: "popularity_desc", limit: LIMIT, page, types: "tv_series" })
+		result = await watchmodeListTitlesResult({ provider, sortBy: "popularity_desc", limit: LIMIT, page, types: "tv_series" })
 	} else if (kind === "popular_movies") {
-		titles = await watchmodeListTitles({ provider, sortBy: "popularity_desc", limit: LIMIT, page, types: "movie" })
+		result = await watchmodeListTitlesResult({ provider, sortBy: "popularity_desc", limit: LIMIT, page, types: "movie" })
 	} else if (kind === "new") {
-		titles = await watchmodeListTitles({
+		result = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "release_date_desc",
 			limit: LIMIT,
@@ -359,7 +389,7 @@ router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 		})
 	} else if (kind === "genre") {
 		if (!genreIdRaw || !Number.isFinite(genreIdRaw)) return res.status(400).json({ error: "Missing genreId" })
-		titles = await watchmodeListTitles({
+		result = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "popularity_desc",
 			limit: LIMIT,
@@ -369,7 +399,7 @@ router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 		})
 	} else if (kind === "genre_tv") {
 		if (!genreIdRaw || !Number.isFinite(genreIdRaw)) return res.status(400).json({ error: "Missing genreId" })
-		titles = await watchmodeListTitles({
+		result = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "popularity_desc",
 			limit: LIMIT,
@@ -379,7 +409,7 @@ router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 		})
 	} else if (kind === "genre_movies") {
 		if (!genreIdRaw || !Number.isFinite(genreIdRaw)) return res.status(400).json({ error: "Missing genreId" })
-		titles = await watchmodeListTitles({
+		result = await watchmodeListTitlesResult({
 			provider,
 			sortBy: "popularity_desc",
 			limit: LIMIT,
@@ -391,13 +421,17 @@ router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 		return res.status(400).json({ error: "Invalid kind" })
 	}
 
+	const titles = result?.titles ?? []
 	const items = await buildItems(provider, titles)
 	const canLoadMore = (titles || []).length === LIMIT
+
+	const rateLimitedNow = !!result?.rateLimited || watchmodeWasRateLimitedRecently()
 
 	return res.json({
 		page,
 		canLoadMore,
 		items,
+		rateLimited: rateLimitedNow,
 	})
 })
 

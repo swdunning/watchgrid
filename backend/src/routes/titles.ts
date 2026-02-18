@@ -3,6 +3,8 @@ import { Router } from "express"
 
 import { prisma } from "../prisma"
 import { requireAuth } from "../auth/authMiddleware"
+import { ensureMetadata } from "../services/titleMetadataService"
+
 const router = Router()
 
 /**
@@ -35,6 +37,11 @@ router.get("/titles/:watchmodeTitleId", requireAuth, async (req, res) => {
 		})
 
 		if (!title) return res.status(404).json({ error: "Not found" })
+
+		// Trigger enrichment in background (non-blocking)
+		if (title.metaStatus !== "OK") {
+			ensureMetadata(watchmodeTitleId).catch(() => {})
+		}
 
 		return res.json(title)
 	} catch (e: any) {

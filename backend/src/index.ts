@@ -15,6 +15,7 @@ import providerRoutes from "./routes/providers"
 import searchRoutes from "./routes/search"
 import listsRoutes from "./routes/lists"
 import browseRoutes from "./routes/browse"
+import titlesEnsureRoutes from "./routes/titlesEnsure"
 
 const app = express()
 
@@ -36,6 +37,7 @@ app.use("/api", providerRoutes)
 app.use("/api", searchRoutes)
 app.use("/api", listsRoutes)
 app.use("/api", browseRoutes)
+app.use("/api", titlesEnsureRoutes)
 
 const port = Number(process.env.PORT ?? 4000)
 app.listen(port, () => console.log(`Backend running on http://localhost:${port}`))

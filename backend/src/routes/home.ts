@@ -1,8 +1,9 @@
+// home.ts
 import { Router } from "express"
 import { prisma } from "../prisma"
 import { requireAuth } from "../auth/authMiddleware"
 import { type ProviderKey, labelFor, normalizeProviderKey } from "../types"
-import { watchmodeListTitles, watchmodeWasRateLimitedRecently } from "../services/watchmodeService"
+import { watchmodeListTitlesResult, watchmodeWasRateLimitedRecently } from "../services/watchmodeService"
 import { tmdbPosterUrl } from "../services/tmdbService"
 import { cacheGet, cacheSet } from "../services/cacheService"
 
@@ -22,10 +23,14 @@ type HomeRow = {
 	label: string
 	savedItems: RowItem[]
 	popularItems: RowItem[]
+
+	// ✅ row-level signal for UI
+	popularRateLimited?: boolean
 }
 
 const POP_LIMIT = 18
 const POP_TTL_SECONDS = 10 * 60 // 10 minutes
+const POP_COOLDOWN_TTL_SECONDS = 30 // short cache if rate-limited + empty
 
 async function asyncPool<T, R>(limit: number, arr: T[], fn: (t: T) => Promise<R>): Promise<R[]> {
 	const ret: Promise<R>[] = []
@@ -53,21 +58,38 @@ async function buildPostered(provider: ProviderKey, titles: any[]): Promise<RowI
 	}))
 }
 
-async function getPopularForProvider(provider: ProviderKey): Promise<RowItem[]> {
-	const cacheKey = `home:popular:${provider}:v1`
-	const cached = await cacheGet<RowItem[]>(cacheKey)
+async function getPopularForProvider(provider: ProviderKey): Promise<{
+	items: RowItem[]
+	rateLimited: boolean
+}> {
+	// ✅ bump key because payload now stores meta (items + rateLimited)
+	const cacheKey = `home:popular:${provider}:v2`
+	const cached = await cacheGet<{ items: RowItem[]; rateLimited: boolean }>(cacheKey)
 	if (cached) return cached
 
-	const popular = await watchmodeListTitles({
+	const popularRes = await watchmodeListTitlesResult({
 		provider,
 		sortBy: "popularity_desc",
 		limit: POP_LIMIT,
 		page: 1,
 	})
 
-	const items = await buildPostered(provider, popular)
-	await cacheSet(cacheKey, items, POP_TTL_SECONDS)
-	return items
+	const items = await buildPostered(provider, popularRes.titles)
+	const rateLimited = !!popularRes.rateLimited
+
+	// ✅ If Watchmode was rate-limited/failed and we got nothing:
+	// - do NOT cache empties for 10 minutes
+	// - BUT do short-cache for ~30s to avoid hammering on refresh
+	if ((rateLimited || !popularRes.ok) && items.length === 0) {
+		const payload = { items, rateLimited }
+		await cacheSet(cacheKey, payload, POP_COOLDOWN_TTL_SECONDS)
+		return payload
+	}
+
+	// Normal success path: cache normally
+	const payload = { items, rateLimited }
+	await cacheSet(cacheKey, payload, POP_TTL_SECONDS)
+	return payload
 }
 
 router.get("/home", requireAuth, async (req, res) => {
@@ -94,7 +116,7 @@ router.get("/home", requireAuth, async (req, res) => {
 	// Per-provider rows
 	const rows: Record<string, HomeRow> = {}
 	for (const p of providers) {
-		rows[p] = { provider: p, label: labelFor(p), savedItems: [], popularItems: [] }
+		rows[p] = { provider: p, label: labelFor(p), savedItems: [], popularItems: [], popularRateLimited: false }
 	}
 
 	for (const it of saved) {
@@ -113,12 +135,20 @@ router.get("/home", requireAuth, async (req, res) => {
 
 	// preload popular for each provider (cached; concurrency limited)
 	await asyncPool(2, providers, async (p) => {
-		rows[p].popularItems = await getPopularForProvider(p)
+		const pop = await getPopularForProvider(p)
+		rows[p].popularItems = pop.items
+		rows[p].popularRateLimited = pop.rateLimited
 	})
+
+	// ✅ overall signal + which providers were limited (for UI messaging)
+	const popularRateLimitedProviders = Object.values(rows)
+		.filter((r) => r.popularRateLimited)
+		.map((r) => r.provider)
 
 	res.json({
 		providers,
 		rateLimited: watchmodeWasRateLimitedRecently(),
+		popularRateLimitedProviders,
 		masterSavedItems,
 		rows: Object.values(rows),
 	})

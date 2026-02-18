@@ -57,63 +57,106 @@ const formatRuntime = (mins: number) => {
   return `${h}h ${r}m`;
 };
 
-const isNotFound = (e: any) =>
-  String(e?.message ?? "").toLowerCase().includes("not found") ||
-  e?.status === 404;
-
-
 export default function TitleModal({ open, item, onClose, onAdd, onRemove }: Props) {
   const [meta, setMeta] = useState<TitleMeta | null>(null);
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [metaErr, setMetaErr] = useState<string | null>(null);
+  const [descExpanded, setDescExpanded] = useState(false);
+const [resolvedWatchUrl, setResolvedWatchUrl] = useState<string | null>(null);
+const [loadingUrl, setLoadingUrl] = useState(false);
 
-  // Fetch metadata when opening / switching titles
+
+  // Fetch metadata when opening / switching titles (seed + ensure metadata)
   useEffect(() => {
     if (!open || !item?.watchmodeTitleId) return;
 
     let cancelled = false;
-    const id = item.watchmodeTitleId;
 
     setLoadingMeta(true);
     setMetaErr(null);
     setMeta(null);
 
-    api<TitleMeta>(`/api/titles/${encodeURIComponent(String(id))}`)
+    api<TitleMeta>("/api/titles/ensure", {
+      method: "POST",
+      body: JSON.stringify({
+        watchmodeTitleId: item.watchmodeTitleId,
+        title: item.title,
+        type: item.type,
+        poster: item.poster,
+      }),
+    })
       .then((data) => {
         if (cancelled) return;
         setMeta(data ?? null);
       })
-
-.catch((e: any) => {
-  if (cancelled) return;
-
-  // 404 just means we haven't cached metadata for this title yet
-  if (isNotFound(e)) {
-    setMetaErr(null);
-    setMeta(null);
-    return;
-  }
-
-  setMetaErr(e?.message ?? "Failed to load details");
-})
-
+      .catch((e: any) => {
+        if (cancelled) return;
+        setMetaErr(e?.message ?? "Failed to load details");
+        setMeta(null);
+      })
       .finally(() => {
         if (cancelled) return;
         setLoadingMeta(false);
       });
+
+	  setDescExpanded(false);
 
     return () => {
       cancelled = true;
     };
   }, [open, item?.watchmodeTitleId]);
 
+
   // Prefer DB meta fields, fallback to base item
   const poster = meta?.poster ?? item?.poster ?? null;
   const title = meta?.title ?? item?.title ?? "";
   const typeLabel = normalizeTypeLabel(meta?.type ?? item?.type ?? "");
   const provider = item?.provider ?? null;
-  const watchUrl = item?.watchUrl ?? null;
+  const watchUrl = resolvedWatchUrl ?? item?.watchUrl ?? null;
 
+
+// Fetch watchUrl when opening if missing (so "Open" works for unsaved items too)
+useEffect(() => {
+  if (!open || !item?.watchmodeTitleId) return;
+
+  // reset when switching titles
+  setResolvedWatchUrl(null);
+
+  // if item already has url, use it
+  if (item.watchUrl) {
+    setResolvedWatchUrl(item.watchUrl);
+    return;
+  }
+
+  // need provider to resolve
+  if (!item.provider) return;
+
+  let cancelled = false;
+
+  setLoadingUrl(true);
+
+  api<{ watchUrl: string | null }>(
+    `/api/watchUrl?provider=${encodeURIComponent(String(item.provider))}&watchmodeTitleId=${encodeURIComponent(
+      String(item.watchmodeTitleId)
+    )}`
+  )
+    .then((d) => {
+      if (cancelled) return;
+      setResolvedWatchUrl(d?.watchUrl ?? null);
+    })
+    .catch(() => {
+      if (cancelled) return;
+      setResolvedWatchUrl(null);
+    })
+    .finally(() => {
+      if (cancelled) return;
+      setLoadingUrl(false);
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [open, item?.watchmodeTitleId, item?.provider, item?.watchUrl]);
 
 
 const chips: string[] = [];
@@ -142,9 +185,25 @@ if (typeLabel === "Series" && meta?.seasons)
       }}
       onClick={onClose}
     >
-      <div className="card" style={{ maxWidth: 520, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+<div
+  className="card"
+  style={{
+    width: "100%",
+    maxWidth: 560,
+
+    // ✅ stable reference size
+    maxHeight: "95vh",
+    overflow: "auto",
+
+    // optional nice feel
+    padding: 14,
+  }}
+  onClick={(e) => e.stopPropagation()}
+>
+
+
         {poster ? (
-          <img src={poster} alt="" style={{ width: "100%", borderRadius: 12, marginBottom: 12 }} />
+          <img src={poster} alt="" style={{ width: "100%", borderRadius: 0, marginBottom: 12, maxHeight: "70vh",objectFit: "cover" }} />
         ) : null}
 
         <h2 style={{ marginTop: 0, marginBottom: 8 }}>{title}</h2>
@@ -189,27 +248,58 @@ if (typeLabel === "Series" && meta?.seasons)
 
         </div>
 
-        {/* Description */}
-        {meta?.description ? (
-          <p style={{ marginTop: 0, marginBottom: 14, lineHeight: 1.45, color: "rgba(255,255,255,0.82)" }}>
-            {meta.description}
-          </p>
-        ) : loadingMeta ? (
-          <div className="muted" style={{ marginBottom: 14 }}>
-            Fetching description…
-          </div>
-        ) : null}
+{/* Description */}
+{meta?.description ? (
+  <>
+    <p
+      style={{
+        marginTop: 0,
+        marginBottom: 10,
+        lineHeight: 1.45,
+        color: "rgba(255,255,255,0.82)",
+        display: "-webkit-box",
+        WebkitLineClamp: descExpanded ? "unset" : 2,
+        WebkitBoxOrient: "vertical",
+        overflow: "hidden",
+      }}
+    >
+      {meta.description}
+    </p>
+
+    {meta.description.length > 160 ? (
+      <button
+        className="btn"
+        style={{ padding: "8px 10px", borderRadius: 10, marginBottom: 14 }}
+        onClick={() => setDescExpanded((v) => !v)}
+      >
+        {descExpanded ? "See less" : "See more"}
+      </button>
+    ) : (
+      <div style={{ height: 4 }} />
+    )}
+  </>
+) : loadingMeta ? (
+  <div className="muted" style={{ marginBottom: 14 }}>
+    Fetching description…
+  </div>
+) : null}
+
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {watchUrl ? (
-            <a className="btn" href={watchUrl} target="_blank" rel="noreferrer noopener">
-              Open
-            </a>
-          ) : (
-            <button className="btn secondary" disabled title="No link saved yet">
-              Open
-            </button>
-          )}
+          {loadingUrl ? (
+  <button className="btn secondary" disabled>
+    Resolving…
+  </button>
+) : watchUrl ? (
+  <a className="btn secondary" href={watchUrl} target="_blank" rel="noreferrer noopener">
+    Open
+  </a>
+) : (
+  <button className="btn secondary" disabled title="No link found yet">
+    Open
+  </button>
+)}
+
 
           {onAdd ? (
             <button className="btn" onClick={onAdd}>
