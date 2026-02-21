@@ -20,6 +20,33 @@ enum TitleMetaStatus {
     ERROR
 }
 
+enum GlobalRowStatus {
+    OK
+    ERROR
+    RATE_LIMITED
+}
+
+model GlobalRowCache {
+    id       String @id @default(cuid())
+    key      String @unique // ex: "popular:NETFLIX:all", "popular:NETFLIX:tv", "popular:NETFLIX:movie"
+    provider String
+    kind     String // popular | new (optional later)
+    mode     String // all | tv | movie
+    region   String @default("US")
+
+    itemsJson String // JSON string: array of RowItem objects
+    status    GlobalRowStatus @default(OK)
+
+    fetchedAt DateTime @default(now())
+    expiresAt DateTime
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([provider, kind, mode])
+    @@index([expiresAt])
+}
+
 model User {
     id           String         @id @default(cuid())
     email        String         @unique

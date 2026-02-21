@@ -16,9 +16,11 @@ import searchRoutes from "./routes/search"
 import listsRoutes from "./routes/lists"
 import browseRoutes from "./routes/browse"
 import titlesEnsureRoutes from "./routes/titlesEnsure"
+import adminRoutes from "./routes/admin"
 
 const app = express()
 
+app.use("/api", adminRoutes)
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 app.use(cookieParser())

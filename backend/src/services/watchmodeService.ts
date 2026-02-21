@@ -1,6 +1,6 @@
 //watchmodeService.ts
 
-console.log("[watchmodeService] LOADED VERSION = 4.2.1-backoff-2s")
+console.log("[watchmodeService] LOADED VERSION = 4.2.2-no-60s")
 
 import axios, { AxiosError } from "axios"
 import { cacheGet, cacheSet } from "./cacheService"
@@ -28,8 +28,11 @@ function getStatus(err: any): number | undefined {
 function getRetryAfterMs(err: any): number | null {
 	const raw = (err as AxiosError)?.response?.headers?.["retry-after"]
 	const sec = Number(raw)
-	if (Number.isFinite(sec) && sec > 0) return sec * 1000
-	return null
+
+	if (!Number.isFinite(sec) || sec <= 0) return null
+
+	// ✅ Cap it. Web requests should not sleep 60s.
+	return Math.min(sec, 2) * 1000 // max 2 seconds
 }
 
 // Track rate-limit signal for UI messaging + caching decisions
@@ -248,14 +251,15 @@ export async function watchmodeListTitlesResult(args: {
 	requireKey()
 
 	const sourceId = await watchmodeResolveSourceId(args.provider)
-	if (!sourceId) return { titles: [], ok: true, rateLimited: false } // no source id = just empty, but not an error
+	if (!sourceId) return { titles: [], ok: true, rateLimited: false }
 
 	const limit = args.limit ?? 24
 	const page = args.page ?? 1
 	const genres = args.genreIds && args.genreIds.length ? args.genreIds.join(",") : ""
 
 	try {
-		const data = await axiosGetWithRetry<any>(`${BASE_URL}/list-titles/`, {
+		// ✅ IMPORTANT: no retry for list-titles (prevents long hangs + quota hammer)
+		const res = await axios.get<any>(`${BASE_URL}/list-titles/`, {
 			params: {
 				apiKey: API_KEY,
 				source_ids: String(sourceId),
@@ -269,13 +273,25 @@ export async function watchmodeListTitlesResult(args: {
 				...(genres ? { genres } : {}),
 			},
 			timeout: 15000,
+			validateStatus: () => true, // we handle non-2xx manually
 		})
 
+		if (res.status === 429) {
+			lastRateLimitAt = Date.now()
+			return { titles: [], ok: false, status: 429, rateLimited: true }
+		}
+
+		if (res.status < 200 || res.status >= 300) {
+			return { titles: [], ok: false, status: res.status, rateLimited: false }
+		}
+
+		const data = res.data
 		const titles = data?.titles ?? data ?? []
 		return { titles, ok: true, rateLimited: false }
 	} catch (e: any) {
 		const status = getStatus(e)
 		const rateLimited = status === 429
+		if (rateLimited) lastRateLimitAt = Date.now()
 		console.warn(`[watchmodeListTitlesResult] failed provider=${args.provider} status=${status ?? "?"}`)
 		return { titles: [], ok: false, status, rateLimited }
 	}

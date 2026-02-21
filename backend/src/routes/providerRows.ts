@@ -6,6 +6,7 @@ import { PROVIDERS, type ProviderKey, labelFor } from "../types"
 import { cacheGet, cacheSet } from "../services/cacheService"
 import { watchmodeGetGenres, watchmodeListTitlesResult, watchmodeWasRateLimitedRecently } from "../services/watchmodeService"
 import { tmdbPosterUrl } from "../services/tmdbService"
+import { getGlobalRow, setGlobalRow } from "../services/globalRowCache"
 
 const router = Router()
 const LIMIT = 18
@@ -101,6 +102,68 @@ function computePayloadTtlSeconds(payload: any, rateLimitedNow: boolean) {
 	return rateLimitedNow && hasEmptyNonListRow ? 30 : 600
 }
 
+async function getPopularTvItems(provider: ProviderKey) {
+	// 1) DB first
+	const cached = await getGlobalRow(provider, "popular", "tv")
+	if (cached?.items?.length) {
+		return { items: cached.items, rateLimited: cached.status === "RATE_LIMITED" }
+	}
+
+	// 2) Watchmode fallback
+	const res = await watchmodeListTitlesResult({
+		provider,
+		sortBy: "popularity_desc",
+		limit: LIMIT,
+		page: 1,
+		types: "tv_series",
+	})
+
+	const items = await buildItems(provider, res.titles)
+
+	// 3) Store globally (don’t lock empties as OK)
+	await setGlobalRow({
+		provider,
+		kind: "popular",
+		mode: "tv",
+		items,
+		ttlSeconds: res.ok && items.length ? 6 * 60 * 60 : 60,
+		status: res.ok && items.length ? "OK" : res.rateLimited ? "RATE_LIMITED" : "ERROR",
+	})
+
+	return { items, rateLimited: res.rateLimited }
+}
+
+async function getPopularMovieItems(provider: ProviderKey) {
+	// 1) DB first
+	const cached = await getGlobalRow(provider, "popular", "movie")
+	if (cached?.items?.length) {
+		return { items: cached.items, rateLimited: cached.status === "RATE_LIMITED" }
+	}
+
+	// 2) Watchmode fallback
+	const res = await watchmodeListTitlesResult({
+		provider,
+		sortBy: "popularity_desc",
+		limit: LIMIT,
+		page: 1,
+		types: "movie",
+	})
+
+	const items = await buildItems(provider, res.titles)
+
+	// 3) Store globally (don’t lock empties as OK)
+	await setGlobalRow({
+		provider,
+		kind: "popular",
+		mode: "movie",
+		items,
+		ttlSeconds: res.ok && items.length ? 6 * 60 * 60 : 60,
+		status: res.ok && items.length ? "OK" : res.rateLimited ? "RATE_LIMITED" : "ERROR",
+	})
+
+	return { items, rateLimited: res.rateLimited }
+}
+
 /**
  * GET /api/provider/:provider/rows
  * mode=all|shows|movies
@@ -156,7 +219,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		provider,
 	}))
 
-	// If specific genre selected -> 3 rows
+	// If specific genre selected -> 3 rows (leave as Watchmode; this is user-driven)
 	if (genreId && Number.isFinite(genreId)) {
 		const tvRes = await watchmodeListTitlesResult({
 			provider,
@@ -227,48 +290,37 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 
 	let rateLimitedNow = watchmodeWasRateLimitedRecently()
 
+	// ✅ DB-first popular TV
 	if (mode !== "movies") {
-		const tvPopularRes = await watchmodeListTitlesResult({
-			provider,
-			sortBy: "popularity_desc",
-			limit: LIMIT,
-			page: 1,
-			types: "tv_series",
-		})
-		rateLimitedNow = rateLimitedNow || tvPopularRes.rateLimited
+		const tv = await getPopularTvItems(provider)
+		rateLimitedNow = rateLimitedNow || tv.rateLimited
 
-		const tvPopular = tvPopularRes.titles
 		rows.push({
 			key: "popular_tv",
 			kind: "popular_tv",
 			title: "Most popular TV shows (USA)",
 			page: 1,
-			canLoadMore: (tvPopular || []).length === LIMIT,
-			items: await buildItems(provider, tvPopular),
+			canLoadMore: (tv.items || []).length === LIMIT,
+			items: tv.items || [],
 		})
 	}
 
+	// ✅ DB-first popular Movies
 	if (mode !== "shows") {
-		const moviePopularRes = await watchmodeListTitlesResult({
-			provider,
-			sortBy: "popularity_desc",
-			limit: LIMIT,
-			page: 1,
-			types: "movie",
-		})
-		rateLimitedNow = rateLimitedNow || moviePopularRes.rateLimited
+		const mv = await getPopularMovieItems(provider)
+		rateLimitedNow = rateLimitedNow || mv.rateLimited
 
-		const moviePopular = moviePopularRes.titles
 		rows.push({
 			key: "popular_movies",
 			kind: "popular_movies",
 			title: "Most popular movies (USA)",
 			page: 1,
-			canLoadMore: (moviePopular || []).length === LIMIT,
-			items: await buildItems(provider, moviePopular),
+			canLoadMore: (mv.items || []).length === LIMIT,
+			items: mv.items || [],
 		})
 	}
 
+	// New on this service (keep Watchmode; optional to globalize later)
 	const newOnRes = await watchmodeListTitlesResult({
 		provider,
 		sortBy: "release_date_desc",
@@ -348,6 +400,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 
 /**
  * Load more for a single row
+ * (kept as Watchmode live pagination; we can DB-cache later if desired)
  */
 router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 	const userId = (req as any).userId as string

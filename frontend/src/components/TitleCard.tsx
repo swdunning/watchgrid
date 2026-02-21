@@ -128,10 +128,22 @@ export default function TitleCard({
               cursor: "pointer",
             }}
           >
-            <img className="posterImg" src={item.poster} alt={item.title} />
+            <img
+  className="posterImg"
+  src={item.poster ?? undefined}
+  alt={item.title}
+  loading="lazy"
+  decoding="async"
+/>
           </button>
         ) : (
-          <img className="posterImg" src={item.poster} alt={item.title} />
+          <img
+  className="posterImg"
+  src={item.poster ?? undefined}
+  alt={item.title}
+  loading="lazy"
+  decoding="async"
+/>
         )
       ) : posterClickable ? (
         <button
