@@ -1,6 +1,6 @@
 //watchmodeService.ts
 
-console.log("[watchmodeService] LOADED VERSION = 4.2.2-no-60s")
+const DBG = process.env.WG_DEBUG_CACHE === "1"
 
 import axios, { AxiosError } from "axios"
 import { cacheGet, cacheSet } from "./cacheService"
@@ -248,6 +248,8 @@ export async function watchmodeListTitlesResult(args: {
 	genreIds?: number[]
 	types?: "movie" | "tv_series"
 }): Promise<WatchmodeListTitlesResult> {
+	const DBG = process.env.WG_DEBUG_CACHE === "1"
+
 	requireKey()
 
 	const sourceId = await watchmodeResolveSourceId(args.provider)
@@ -257,8 +259,13 @@ export async function watchmodeListTitlesResult(args: {
 	const page = args.page ?? 1
 	const genres = args.genreIds && args.genreIds.length ? args.genreIds.join(",") : ""
 
+	const t0 = Date.now()
+
+	if (DBG) {
+		console.log(`[WM] START provider=${args.provider} sourceId=${sourceId} sort=${args.sortBy} types=${args.types ?? "all"} limit=${limit} page=${page} genres=${genres || "none"}`)
+	}
+
 	try {
-		// ✅ IMPORTANT: no retry for list-titles (prevents long hangs + quota hammer)
 		const res = await axios.get<any>(`${BASE_URL}/list-titles/`, {
 			params: {
 				apiKey: API_KEY,
@@ -273,15 +280,25 @@ export async function watchmodeListTitlesResult(args: {
 				...(genres ? { genres } : {}),
 			},
 			timeout: 15000,
-			validateStatus: () => true, // we handle non-2xx manually
+			validateStatus: () => true,
 		})
+
+		if (DBG) {
+			console.log(`[WM] END provider=${args.provider} status=${res.status} ms=${Date.now() - t0}`)
+		}
 
 		if (res.status === 429) {
 			lastRateLimitAt = Date.now()
+			if (DBG) {
+				console.warn(`[WM] 429 provider=${args.provider} ms=${Date.now() - t0}`)
+			}
 			return { titles: [], ok: false, status: 429, rateLimited: true }
 		}
 
 		if (res.status < 200 || res.status >= 300) {
+			if (DBG) {
+				console.warn(`[WM] non-2xx provider=${args.provider} status=${res.status}`)
+			}
 			return { titles: [], ok: false, status: res.status, rateLimited: false }
 		}
 
@@ -292,7 +309,11 @@ export async function watchmodeListTitlesResult(args: {
 		const status = getStatus(e)
 		const rateLimited = status === 429
 		if (rateLimited) lastRateLimitAt = Date.now()
-		console.warn(`[watchmodeListTitlesResult] failed provider=${args.provider} status=${status ?? "?"}`)
+
+		if (DBG) {
+			console.warn(`[WM] ERROR provider=${args.provider} status=${status ?? "?"}`)
+		}
+
 		return { titles: [], ok: false, status, rateLimited }
 	}
 }

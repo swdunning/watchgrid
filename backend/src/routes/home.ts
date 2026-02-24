@@ -30,6 +30,26 @@ type HomeRow = {
 
 const POP_LIMIT = 18
 
+const DBG = process.env.WG_DEBUG_CACHE === "1"
+const POPULAR_TTL_SECONDS = 24 * 60 * 60 // 24 hours
+
+// Prevent multiple refreshes for the same provider happening at once (in-memory)
+const refreshInFlight = new Map<string, Promise<void>>()
+
+function fireAndForgetRefresh(key: string, fn: () => Promise<void>) {
+	const k = key.toUpperCase() // normalize so keys always match
+	if (refreshInFlight.has(k)) {
+		if (DBG) console.log(`[POPULAR] refresh already in-flight key=${k} (skip)`)
+		return
+	}
+	const p = fn()
+		.catch((e) => {
+			if (DBG) console.warn(`[POPULAR] refresh failed key=${k}`, e)
+		})
+		.finally(() => refreshInFlight.delete(k))
+	refreshInFlight.set(k, p)
+}
+
 async function asyncPool<T, R>(limit: number, arr: T[], fn: (t: T) => Promise<R>): Promise<R[]> {
 	const ret: Promise<R>[] = []
 	const executing: Promise<any>[] = []
@@ -57,47 +77,146 @@ async function buildPostered(provider: ProviderKey, titles: any[]): Promise<RowI
 }
 
 async function getPopularForProvider(provider: ProviderKey): Promise<{ items: RowItem[]; rateLimited: boolean }> {
-	// 1) DB first
-	const cached = await getGlobalRow(provider, "popular", "all")
-	if (cached?.items?.length) {
-		return { items: cached.items as RowItem[], rateLimited: cached.status === "RATE_LIMITED" }
-	}
+	// "Has any items at all?" (fresh OR stale)
+	const hasItems = (r: any | null) => (r?.items?.length ?? 0) > 0
+	const isFresh = (r: any | null) => !!r?.isFresh
 
-	// 2) If no DB cache, try Watchmode once
-	const popularRes = await watchmodeListTitlesResult({
-		provider,
-		sortBy: "popularity_desc",
-		limit: POP_LIMIT,
-		page: 1,
-	})
+	// --- Helper: refresh "all" from Watchmode and write to DB (24h TTL) ---
+	// IMPORTANT: If Watchmode fails and returns 0 items, do NOT overwrite existing cache with [].
+	const refreshAll = async () => {
+		if (DBG) console.log(`[POPULAR] REFRESH(all) provider=${provider} starting...`)
 
-	const items = await buildPostered(provider, popularRes.titles)
+		const popularRes = await watchmodeListTitlesResult({
+			provider,
+			sortBy: "popularity_desc",
+			limit: POP_LIMIT,
+			page: 1,
+		})
 
-	// 3) Don’t store empties as OK
-	if (!popularRes.ok && items.length === 0) {
-		// short “cooldown” record so we don’t spam
+		const items = await buildPostered(provider, popularRes.titles)
+
+		// ✅ Key change: do NOT overwrite cache with empty items on failure
+		if (!popularRes.ok && items.length === 0) {
+			if (DBG) {
+				console.log(`[POPULAR] REFRESH(all) provider=${provider} failed ok=${popularRes.ok} rateLimited=${popularRes.rateLimited} -> keep existing cache`)
+			}
+			return
+		}
+
 		await setGlobalRow({
 			provider,
 			kind: "popular",
 			mode: "all",
-			items: [],
-			ttlSeconds: 60,
-			status: popularRes.rateLimited ? "RATE_LIMITED" : "ERROR",
+			items,
+			ttlSeconds: POPULAR_TTL_SECONDS,
+			// If we got items, treat as OK; rateLimited status is mainly meaningful when items are empty.
+			status: "OK",
 		})
-		return { items: [], rateLimited: popularRes.rateLimited }
+
+		// Also store splits so Provider Page benefits
+		const tvItems = items.filter((it) => String(it.type).toLowerCase().includes("tv"))
+		const mvItems = items.filter((it) => String(it.type).toLowerCase().includes("movie"))
+
+		if (tvItems.length) {
+			await setGlobalRow({
+				provider,
+				kind: "popular",
+				mode: "tv",
+				items: tvItems.slice(0, POP_LIMIT),
+				ttlSeconds: POPULAR_TTL_SECONDS,
+				status: "OK",
+			})
+		}
+
+		if (mvItems.length) {
+			await setGlobalRow({
+				provider,
+				kind: "popular",
+				mode: "movie",
+				items: mvItems.slice(0, POP_LIMIT),
+				ttlSeconds: POPULAR_TTL_SECONDS,
+				status: "OK",
+			})
+		}
+
+		if (DBG) console.log(`[POPULAR] REFRESH(all) provider=${provider} done items=${items.length}`)
 	}
 
-	// 4) Store globally for everyone
-	await setGlobalRow({
-		provider,
-		kind: "popular",
-		mode: "all",
-		items,
-		ttlSeconds: 6 * 60 * 60, // 6 hours
-		status: "OK",
-	})
+	// --- 1) Try DB "all" first ---
+	const cachedAll = await getGlobalRow(provider, "popular", "all")
 
-	return { items, rateLimited: false }
+	// If we have items (fresh OR stale), return immediately
+	if (hasItems(cachedAll)) {
+		// If stale, refresh in background (don't await)
+		if (!isFresh(cachedAll)) {
+			const refreshKey = `popular:${provider}:all`
+			if (DBG) console.log(`[POPULAR] serve STALE(all) provider=${provider} -> async refresh`)
+			fireAndForgetRefresh(refreshKey, refreshAll)
+		} else {
+			if (DBG) console.log(`[POPULAR] serve FRESH(all) provider=${provider}`)
+		}
+
+		return {
+			items: cachedAll.items as RowItem[],
+			rateLimited: cachedAll.status === "RATE_LIMITED",
+		}
+	}
+
+	// --- 2) Fallback: merge TV + Movie caches (what Provider Page writes) ---
+	const cachedTv = await getGlobalRow(provider, "popular", "tv")
+	const cachedMv = await getGlobalRow(provider, "popular", "movie")
+
+	const tvItems = hasItems(cachedTv) ? (cachedTv!.items as RowItem[]) : []
+	const mvItems = hasItems(cachedMv) ? (cachedMv!.items as RowItem[]) : []
+
+	if (tvItems.length || mvItems.length) {
+		// Merge/interleave for a mixed row
+		const merged: RowItem[] = []
+		let i = 0
+		while (merged.length < POP_LIMIT && (i < tvItems.length || i < mvItems.length)) {
+			if (i < tvItems.length) merged.push(tvItems[i])
+			if (merged.length >= POP_LIMIT) break
+			if (i < mvItems.length) merged.push(mvItems[i])
+			i++
+		}
+
+		// ✅ Key change: Don’t upsert popular:all on every request.
+		// Only backfill if popular:all is missing OR stale.
+		if (!cachedAll || !isFresh(cachedAll)) {
+			await setGlobalRow({
+				provider,
+				kind: "popular",
+				mode: "all",
+				items: merged,
+				ttlSeconds: POPULAR_TTL_SECONDS,
+				status: "OK",
+			})
+		}
+
+		// If either cache is stale, refresh in background (refreshAll writes all+splits)
+		if (!isFresh(cachedTv) || !isFresh(cachedMv)) {
+			const refreshKey = `popular:${provider}:all`
+			if (DBG) console.log(`[POPULAR] serve STALE(tv/movie) provider=${provider} -> async refresh`)
+			fireAndForgetRefresh(refreshKey, refreshAll)
+		} else {
+			if (DBG) console.log(`[POPULAR] serve FRESH(tv/movie) provider=${provider}`)
+		}
+
+		const rateLimited = cachedTv?.status === "RATE_LIMITED" || cachedMv?.status === "RATE_LIMITED"
+		return { items: merged, rateLimited: !!rateLimited }
+	}
+
+	// --- 3) True cold-start: no DB cache at all, so we must call Watchmode and wait ---
+	if (DBG) console.log(`[POPULAR] COLD START provider=${provider} -> Watchmode (awaiting)`)
+
+	await refreshAll()
+
+	// After refresh, try DB again
+	const after = await getGlobalRow(provider, "popular", "all")
+	return {
+		items: (after?.items as RowItem[]) ?? [],
+		rateLimited: after?.status === "RATE_LIMITED" || false,
+	}
 }
 
 router.get("/home", requireAuth, async (req, res) => {

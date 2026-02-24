@@ -1,3 +1,4 @@
+// globalRowCache.ts
 import { prisma } from "../prisma"
 
 export type GlobalRowItem = {
@@ -19,20 +20,27 @@ export async function getGlobalRow(provider: string, kind: string, mode: string,
 	if (!row) return null
 
 	const items: GlobalRowItem[] = JSON.parse(row.itemsJson || "[]")
+	const isFresh = row.expiresAt.getTime() > Date.now()
+
 	return {
 		key,
 		items,
 		expiresAt: row.expiresAt,
 		fetchedAt: row.fetchedAt,
 		status: row.status,
-		isFresh: row.expiresAt.getTime() > Date.now(),
+		isFresh,
 	}
 }
 
 export async function setGlobalRow(args: { provider: string; kind: string; mode: string; items: GlobalRowItem[]; ttlSeconds: number; status?: "OK" | "ERROR" | "RATE_LIMITED"; region?: string }) {
+	const DBG = process.env.WG_DEBUG_CACHE === "1"
 	const region = args.region ?? "US"
 	const key = buildRowKey(args.provider, args.kind, args.mode, region)
 	const expiresAt = new Date(Date.now() + args.ttlSeconds * 1000)
+
+	if (DBG) {
+		console.log(`[GRC] SET key=${key} items=${(args.items ?? []).length} status=${args.status ?? "OK"} ttl=${args.ttlSeconds}s`)
+	}
 
 	await prisma.globalRowCache.upsert({
 		where: { key },
