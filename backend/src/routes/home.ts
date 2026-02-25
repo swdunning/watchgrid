@@ -34,19 +34,58 @@ const DBG = process.env.WG_DEBUG_CACHE === "1"
 const POPULAR_TTL_SECONDS = 24 * 60 * 60 // 24 hours
 
 // Prevent multiple refreshes for the same provider happening at once (in-memory)
+// Per-provider dedupe (don’t start multiple refreshes for same provider)
 const refreshInFlight = new Map<string, Promise<void>>()
 
+// Global limiter: run only ONE refresh at a time (queue)
+let refreshQueue: Promise<void> = Promise.resolve()
+
+// Per-provider cooldown so we don't enqueue repeatedly during dev double-requests
+const refreshQueuedAt = new Map<string, number>()
+const REFRESH_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
+
+function enqueueGlobalRefresh(fn: () => Promise<void>) {
+	refreshQueue = refreshQueue
+		.then(() => fn())
+		.catch((e) => {
+			if (DBG) console.warn(`[POPULAR] queued refresh failed`, e)
+		})
+}
+
 function fireAndForgetRefresh(key: string, fn: () => Promise<void>) {
-	const k = key.toUpperCase() // normalize so keys always match
+	const k = key.toUpperCase()
+
+	// If already running for this provider, skip
 	if (refreshInFlight.has(k)) {
 		if (DBG) console.log(`[POPULAR] refresh already in-flight key=${k} (skip)`)
 		return
 	}
-	const p = fn()
+
+	// Cooldown to avoid re-enqueue during dev duplicate requests
+	const last = refreshQueuedAt.get(k) ?? 0
+	if (Date.now() - last < REFRESH_COOLDOWN_MS) {
+		if (DBG) console.log(`[POPULAR] refresh cooldown active key=${k} (skip)`)
+		return
+	}
+	refreshQueuedAt.set(k, Date.now())
+
+	// Enqueue globally (only one executes at a time)
+	const p = new Promise<void>((resolve) => {
+		enqueueGlobalRefresh(async () => {
+			try {
+				await fn()
+			} finally {
+				resolve()
+			}
+		})
+	})
 		.catch((e) => {
 			if (DBG) console.warn(`[POPULAR] refresh failed key=${k}`, e)
 		})
-		.finally(() => refreshInFlight.delete(k))
+		.finally(() => {
+			refreshInFlight.delete(k)
+		})
+
 	refreshInFlight.set(k, p)
 }
 
