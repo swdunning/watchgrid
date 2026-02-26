@@ -800,7 +800,7 @@ export default function ProviderPage() {
             {/* Curated genres CTA */}
             {selectedGenreNum === null ? (
               <div className="card muted">
-                Load curated genre rows below (3 at a time). Or select a specific Genre from the dropdown above.
+                Load genre rows below (3 at a time). Or select a specific Genre from the dropdown above.
                 <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {genresPage === 0 ? (
                     <button className="btn secondary" onClick={loadGenresFirst} disabled={loadingGenres}>
@@ -811,7 +811,7 @@ export default function ProviderPage() {
                       {loadingGenres ? "Loading…" : "Load More Genres"}
                     </button>
                   ) : (
-                    <div className="muted">All curated genres loaded.</div>
+                    <div className="muted">All genres loaded.</div>
                   )}
                 </div>
               </div>

@@ -394,6 +394,21 @@ function genreNameById(genres: { id: number; name: string }[], id: number) {
 	return genres.find((g) => g.id === id)?.name ?? null
 }
 
+function slugKey(s: string) {
+	return String(s || "")
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "_")
+		.replace(/^_+|_+$/g, "")
+}
+
+function genreRowTitleFor(name: string, mode: "all" | "shows" | "movies") {
+	// You can tweak wording later; this keeps titles consistent
+	if (mode === "shows") return `Most popular TV shows - ${name}`
+	if (mode === "movies") return `Most popular movies - ${name}`
+	return `Most popular - ${name}`
+}
+
 /**
  * GET /api/provider/:provider/rows
  * mode=all|shows|movies
@@ -678,16 +693,17 @@ router.get("/provider/:provider/genres", requireAuth, async (req, res) => {
 
 	const typesForMode: "movie" | "tv_series" | undefined = mode === "shows" ? "tv_series" : mode === "movies" ? "movie" : undefined
 
-	const { comedyId, dramaId, scifiId, actionId, mysteryId, docId } = await getCuratedGenreIds()
+	// ✅ Load ALL genres from Watchmode (not curated)
+	const genres = await watchmodeGetGenres()
 
-	const allGenreDefs: { key: string; title: string; id: number | null }[] = [
-		{ key: "comedy", title: "Most popular comedies", id: comedyId },
-		{ key: "drama", title: "Most popular drama", id: dramaId },
-		{ key: "scifi", title: "Most popular Sci-fi/Fantasy", id: scifiId },
-		{ key: "action", title: "Most popular action", id: actionId },
-		{ key: "mystery", title: "Most popular mysteries", id: mysteryId },
-		{ key: "docs", title: "Most popular documentaries", id: docId },
-	].filter((g) => !!g.id)
+	// Keep ordering stable so paging is consistent
+	const sorted = [...(genres || [])].sort((a, b) => String(a.name).localeCompare(String(b.name)))
+
+	const allGenreDefs: { key: string; title: string; id: number }[] = sorted.map((g) => ({
+		key: `genre_${g.id}`,
+		title: `Most popular - ${g.name}`,
+		id: g.id,
+	}))
 
 	const total = allGenreDefs.length
 	const start = (page - 1) * GENRES_PAGE_SIZE
@@ -822,5 +838,5 @@ router.get("/provider/:provider/browse", requireAuth, async (req, res) => {
 		rateLimited: rateLimitedNow,
 	})
 })
-
+console.log("[providerRows] routes registered")
 export default router
