@@ -15,22 +15,35 @@ type RowItem = {
   provider?: string;
 };
 
+type Row = {
+  key: string;
+  kind: string;
+  title: string;
+  page: number;
+  canLoadMore: boolean;
+  genreId?: number | null;
+  items: RowItem[];
+};
+
 type ProviderRowPayload = {
   provider: string;
   label: string;
   mode: "all" | "shows" | "movies";
   genreId: number | null;
-  includeGenres: boolean;
   rateLimited?: boolean;
-  rows: Array<{
-    key: string;
-    kind: string;
-    title: string;
-    page: number;
-    canLoadMore: boolean;
-    genreId?: number | null;
-    items: RowItem[];
-  }>;
+  rows: Row[];
+};
+
+type GenresPagePayload = {
+  provider: string;
+  label: string;
+  mode: "all" | "shows" | "movies";
+  page: number;
+  pageSize: number;
+  total: number;
+  canLoadMore: boolean;
+  rateLimited?: boolean;
+  rows: Row[];
 };
 
 type ProviderMeta = { provider: string; label: string; logoUrl: string | null };
@@ -43,14 +56,12 @@ const normalizeTypeLabel = (t?: string | null) => {
   if (lower === "tv_series" || lower === "tv") return "Series";
   if (lower === "movie") return "Movie";
 
-  // fallback: convert snake_case to Title Case
   return s
     ? s
         .replace(/_/g, " ")
         .replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
     : "";
 };
-
 
 export default function ProviderPage() {
   const nav = useNavigate();
@@ -63,14 +74,19 @@ export default function ProviderPage() {
   const [err, setErr] = useState<string | null>(null);
   const [rateLimited, setRateLimited] = useState(false);
   const [modalItem, setModalItem] = useState<RowItem | null>(null);
- 
 
   // Mode / genre filters
   const [mode, setMode] = useState<"all" | "shows" | "movies">("all");
   const [genreId, setGenreId] = useState<string>("all");
 
-  // Rows payload
+  // Base rows payload (My List + Popular + New, etc.)
   const [payload, setPayload] = useState<ProviderRowPayload | null>(null);
+
+  // Curated genre rows (Option B)
+  const [genreRows, setGenreRows] = useState<Row[]>([]);
+  const [genresPage, setGenresPage] = useState(0); // 0 = none loaded yet
+  const [canLoadMoreGenres, setCanLoadMoreGenres] = useState(false);
+  const [loadingGenres, setLoadingGenres] = useState(false);
 
   // Search
   const [q, setQ] = useState("");
@@ -81,11 +97,9 @@ export default function ProviderPage() {
   // Per-row loading states for Load More
   const [loadingMore, setLoadingMore] = useState<Record<string, boolean>>({});
 
-  // ✅ Keep a ref to each row's horizontal rail so we can auto-scroll after "Load more"
-const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // rail refs
+  const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-
-  // (kept; not used right now but harmless)
   const selectedGenreNum = useMemo(() => (genreId === "all" ? null : Number(genreId)), [genreId]);
 
   const loadMeta = async () => {
@@ -98,7 +112,7 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
     }
   };
 
-  const loadGenres = async () => {
+  const loadGenresList = async () => {
     try {
       const data = await api<{ genres: Genre[] }>("/api/genres");
       setGenres(Array.isArray(data.genres) ? data.genres : []);
@@ -107,15 +121,25 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
     }
   };
 
-  const loadRows = async (includeGenres: boolean) => {
+  const resetCuratedGenres = () => {
+    setGenreRows([]);
+    setGenresPage(0);
+    setCanLoadMoreGenres(false);
+    setLoadingGenres(false);
+  };
+
+  const loadRows = async () => {
     setLoading(true);
     setErr(null);
+
+    // Anytime provider/mode/genre changes, reset curated genre paging.
+    resetCuratedGenres();
+
     try {
       const url =
         `/api/provider/${encodeURIComponent(provider)}/rows` +
         `?mode=${mode}` +
-        `&genreId=${encodeURIComponent(genreId)}` +
-        `&includeGenres=${includeGenres ? "1" : "0"}`;
+        `&genreId=${encodeURIComponent(genreId)}`;
 
       const data = await api<ProviderRowPayload>(url);
       setPayload(data);
@@ -127,14 +151,55 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
     }
   };
 
+  const loadCuratedGenresPage = async (page: number) => {
+    setLoadingGenres(true);
+    setErr(null);
+
+    try {
+      const url =
+        `/api/provider/${encodeURIComponent(provider)}/genres` +
+        `?mode=${encodeURIComponent(mode)}` +
+        `&page=${encodeURIComponent(String(page))}`;
+
+      const data = await api<GenresPagePayload>(url);
+
+      // Merge rows (append) - avoid duplicates by key
+      setGenreRows((prev) => {
+        const existing = new Set(prev.map((r) => r.key));
+        const add = (data.rows || []).filter((r) => !existing.has(r.key));
+        return [...prev, ...add];
+      });
+
+      setGenresPage(data.page ?? page);
+      setCanLoadMoreGenres(!!data.canLoadMore);
+      setRateLimited((prev) => prev || !!data.rateLimited);
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to load genre rows");
+    } finally {
+      setLoadingGenres(false);
+    }
+  };
+
+  const loadGenresFirst = async () => {
+    if (loadingGenres) return;
+    // start at page 1
+    await loadCuratedGenresPage(1);
+  };
+
+  const loadMoreGenres = async () => {
+    if (loadingGenres) return;
+    const next = (genresPage || 0) + 1;
+    await loadCuratedGenresPage(next);
+  };
+
   useEffect(() => {
     loadMeta();
-    loadGenres();
+    loadGenresList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider]);
 
   useEffect(() => {
-    loadRows(false);
+    loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider, mode, genreId]);
 
@@ -181,15 +246,10 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
     }
   };
 
-  /**
-   * When TitleCard lazily resolves watchUrl, patch it into:
-   * 1) payload rows (all rows)
-   * 2) provider-scoped search results
-   */
   const applyWatchUrl = (watchmodeTitleId: number, watchUrl: string | null) => {
     if (!watchUrl) return;
 
-    // Patch payload rows
+    // Patch base payload rows
     setPayload((prev) => {
       if (!prev) return prev;
       return {
@@ -201,13 +261,18 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
       };
     });
 
+    // Patch curated genre rows
+    setGenreRows((prev) =>
+      (prev || []).map((r) => ({
+        ...r,
+        items: (r.items || []).map((it) => (it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it))
+      }))
+    );
+
     // Patch provider search results
     setResults((prev) => (prev || []).map((it) => (it.watchmodeTitleId === watchmodeTitleId ? { ...it, watchUrl } : it)));
   };
 
-  /**
-   * Patch helper: update "my_list" row items without reloading the whole page (zero flicker).
-   */
   const patchMyList = (updater: (items: RowItem[]) => RowItem[]) => {
     setPayload((prev) => {
       if (!prev) return prev;
@@ -221,21 +286,11 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
     });
   };
 
-  /**
-   * ✅ Set of ids currently in My List (used to disable +Add everywhere else)
-   */
   const myListIds = useMemo(() => {
     const my = payload?.rows?.find((r) => r.kind === "my_list")?.items ?? [];
     return new Set(my.map((x) => x.watchmodeTitleId));
   }, [payload]);
 
-  /**
-   * Optimistic add:
-   * 1) insert into my_list immediately
-   * 2) POST /lists/add
-   * 3) use API response to patch watchUrl so Open works instantly
-   * 4) revert on failure
-   */
   const addToList = async (item: RowItem) => {
     setErr(null);
 
@@ -245,7 +300,6 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
       watchUrl: item.watchUrl ?? null
     };
 
-    // optimistic insert
     patchMyList((items) => {
       const exists = items.some((x) => x.watchmodeTitleId === optimistic.watchmodeTitleId);
       if (exists) return items;
@@ -268,7 +322,6 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
       const saved = res?.item;
       const returnedWatchUrl: string | null = saved?.watchUrl ?? null;
 
-      // patch list + any other spots in this page
       if (returnedWatchUrl) {
         patchMyList((items) =>
           items.map((x) => (x.watchmodeTitleId === optimistic.watchmodeTitleId ? { ...x, watchUrl: returnedWatchUrl } : x))
@@ -281,12 +334,6 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
     }
   };
 
-  /**
-   * Optimistic remove:
-   * 1) remove from my_list immediately
-   * 2) POST /lists/remove
-   * 3) revert on failure
-   */
   const removeFromList = async (watchmodeTitleId: number) => {
     setErr(null);
 
@@ -312,20 +359,17 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
     }
   };
 
-  const loadGenreRows = async () => {
-    await loadRows(true);
-  };
-
   const loadMoreForRow = async (rowKey: string) => {
-    if (!payload) return;
-    const row = payload.rows.find((r) => r.key === rowKey);
+    // row may be in base payload OR curated genres
+    const allRows: Row[] = [...(payload?.rows || []), ...(genreRows || [])];
+    const row = allRows.find((r) => r.key === rowKey);
     if (!row || !row.canLoadMore) return;
 
     setLoadingMore((prev) => ({ ...prev, [rowKey]: true }));
     setErr(null);
-	// ✅ Capture where the newly appended items will start (in pixels)
-	const railEl = railRefs.current[rowKey];
-	const startOfNewItemsPx = railEl?.scrollWidth ?? 0;
+
+    const railEl = railRefs.current[rowKey];
+    const startOfNewItemsPx = railEl?.scrollWidth ?? 0;
 
     try {
       const nextPage = (row.page ?? 1) + 1;
@@ -333,14 +377,17 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
       const url =
         `/api/provider/${encodeURIComponent(provider)}/browse` +
         `?kind=${encodeURIComponent(row.kind)}` +
-        `&mode=${encodeURIComponent(payload.mode)}` +
+        `&mode=${encodeURIComponent(payload?.mode ?? mode)}` +
         `&page=${encodeURIComponent(String(nextPage))}` +
         (row.genreId ? `&genreId=${encodeURIComponent(String(row.genreId))}` : "");
 
       const more = await api<{ page: number; canLoadMore: boolean; items: RowItem[] }>(url);
 
+      // update either base payload rows or curated genre rows
       setPayload((prev) => {
         if (!prev) return prev;
+        const found = prev.rows.some((r) => r.key === rowKey);
+        if (!found) return prev;
         return {
           ...prev,
           rows: prev.rows.map((r) => {
@@ -355,22 +402,31 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
         };
       });
 
-	  // ✅ After DOM updates, scroll so the first newly loaded item is first in view
-	requestAnimationFrame(() => {
-  	requestAnimationFrame(() => {
-		const el = railRefs.current[rowKey];
-		if (!el) return;
+      setGenreRows((prev) => {
+        const found = prev.some((r) => r.key === rowKey);
+        if (!found) return prev;
+        return prev.map((r) => {
+          if (r.key !== rowKey) return r;
+          return {
+            ...r,
+            page: more.page,
+            canLoadMore: more.canLoadMore,
+            items: [...(r.items || []), ...(more.items || [])]
+          };
+        });
+      });
 
-		// Smooth + snappy (native). Fallback to instant if unsupported.
-		try {
-		el.scrollTo({ left: startOfNewItemsPx, behavior: "smooth" });
-		} catch {
-		el.scrollLeft = startOfNewItemsPx;
-		}
-	});
-	});
-
-
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = railRefs.current[rowKey];
+          if (!el) return;
+          try {
+            el.scrollTo({ left: startOfNewItemsPx, behavior: "smooth" });
+          } catch {
+            el.scrollLeft = startOfNewItemsPx;
+          }
+        });
+      });
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load more");
     } finally {
@@ -380,38 +436,36 @@ const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const label = meta?.label || payload?.label || provider;
 
-const trendingItems = useMemo(() => {
-  const rows = payload?.rows || [];
-  if (!rows.length) return [];
+  const trendingItems = useMemo(() => {
+    const rows = payload?.rows || [];
+    if (!rows.length) return [];
 
-  const trendingRow =
-    rows.find((r) => String(r.title).toLowerCase().includes("trending") && (r.items?.length ?? 0) > 0) ??
-    rows.find((r) => r.kind !== "my_list" && (r.items?.length ?? 0) > 0) ??
-    null;
+    const trendingRow =
+      rows.find((r) => String(r.title).toLowerCase().includes("trending") && (r.items?.length ?? 0) > 0) ??
+      rows.find((r) => r.kind !== "my_list" && (r.items?.length ?? 0) > 0) ??
+      null;
 
-  if (!trendingRow) return [];
+    if (!trendingRow) return [];
+    return (trendingRow.items || []).slice(0, 3);
+  }, [payload]);
 
-  return (trendingRow.items || []).slice(0, 3);
-}, [payload]);
+  const [isHeroPaused, setIsHeroPaused] = useState(false);
+  const [heroIndex, setHeroIndex] = useState(0);
 
-const [isHeroPaused, setIsHeroPaused] = useState(false);
+  useEffect(() => {
+    if (!trendingItems.length || isHeroPaused) return;
+    const id = setInterval(() => {
+      setHeroIndex((prev) => (prev + 1) % trendingItems.length);
+    }, 10000);
+    return () => clearInterval(id);
+  }, [trendingItems, isHeroPaused]);
 
-const [heroIndex, setHeroIndex] = useState(0);
+  const heroItem = trendingItems[heroIndex] ?? null;
 
-useEffect(() => {
-  if (!trendingItems.length || isHeroPaused) return;
-
-  const id = setInterval(() => {
-    setHeroIndex((prev) => (prev + 1) % trendingItems.length);
-  }, 10000); //10 Seconds
-
-  return () => clearInterval(id);
-}, [trendingItems, isHeroPaused]);
-
-
-const heroItem = trendingItems[heroIndex] ?? null;
-
-
+  // What rows are rendered? Base rows + appended curated genre rows
+  const renderedRows: Row[] = useMemo(() => {
+    return [...(payload?.rows || []), ...(genreRows || [])];
+  }, [payload, genreRows]);
 
   return (
     <>
@@ -431,233 +485,134 @@ const heroItem = trendingItems[heroIndex] ?? null;
             {meta?.logoUrl ? <img src={meta.logoUrl} alt="" style={{ width: 60, height: 60, borderRadius: 10 }} /> : null}
             <div style={{ minWidth: 0 }}>
               <h1 style={{ margin: 0 }}>{label}</h1>
-			  
               <div className="muted">Browse and build your {label} list.</div>
-			  
             </div>
           </div>
 
-          {/* Hero: Trending (from existing row data, no extra calls) */}
+          {/* Hero */}
           {heroItem ? (
-
             <div
               className="card heroBanner"
-              style={{
-                marginTop: 12,
-                padding: 0,
-                overflow: "hidden",
-                // border: "1px solid rgba(255,255,255,0.10)",
-                // background: "rgba(255,255,255,0.03)",
-              }}
-			  onMouseEnter={() => setIsHeroPaused(true)}
-			onMouseLeave={() => setIsHeroPaused(false)}
+              style={{ marginTop: 12, padding: 0, overflow: "hidden" }}
+              onMouseEnter={() => setIsHeroPaused(true)}
+              onMouseLeave={() => setIsHeroPaused(false)}
             >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "170px 1fr",
-                  gap: 14,
-                  alignItems: "stretch",
-                }}
-              >
-                <div
-					key={`poster-${heroItem.watchmodeTitleId}`}
-					style={{
-						padding: 12,
-						zIndex: 2,
-						animation: "heroFade 2000ms ease"
-					}}
-					>
-
-
+              <div style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: 14, alignItems: "stretch" }}>
+                <div key={`poster-${heroItem.watchmodeTitleId}`} style={{ padding: 12, zIndex: 2, animation: "heroFade 2000ms ease" }}>
                   {heroItem.poster ? (
                     <img
                       src={heroItem.poster}
                       alt=""
-						style={{
-						width: 160,
-						height: 240,
-						objectFit: "cover",
-						borderRadius: 14,
-						border: "2px solid rgba(255,255,255,0.10)",
-						boxShadow: "0 18px 50px rgba(0, 0, 0, 0.85)"
-						}}
-
+                      style={{
+                        width: 160,
+                        height: 240,
+                        objectFit: "cover",
+                        borderRadius: 14,
+                        border: "2px solid rgba(255,255,255,0.10)",
+                        boxShadow: "0 18px 50px rgba(0, 0, 0, 0.85)"
+                      }}
                     />
                   ) : (
                     <div className="skel skelPoster" />
                   )}
                 </div>
 
-                <div
-                  style={{
+                <div style={{ padding: "14px 14px 14px 0", minWidth: 0 }}>
+                  {heroItem.poster ? (
+                    <>
+                      <div className="heroBackdrop" style={{ backgroundImage: `url(${heroItem.poster})` }} />
+                      <div className="heroGrain" />
+                    </>
+                  ) : null}
 
-                    padding: "14px 14px 14px 0",
-                    minWidth: 0,
-                  }}
-                >
-                  {/* soft background using poster */}
-				{heroItem.poster ? (
-				<>
-					<div
-					className="heroBackdrop"
-					style={{ backgroundImage: `url(${heroItem.poster})` }}
-					/>
-					<div className="heroGrain" />
-				</>
-				) : null}
-
-
-				<div
-				key={heroItem.watchmodeTitleId}
-				style={{
-					position: "relative",
-					animation: "heroFade 2000ms ease"
-				}}
-				>
-
+                  <div key={heroItem.watchmodeTitleId} style={{ position: "relative", animation: "heroFade 2000ms ease" }}>
                     <div className="muted" style={{ fontWeight: 900, letterSpacing: 0.2 }}>
                       Trending on {label}
                     </div>
 
-                    <h2 style={{ margin: "6px 0 6px", maxWidth: 520 }}>
-                      {heroItem.title}
-                    </h2>
+                    <h2 style={{ margin: "6px 0 6px", maxWidth: 520 }}>{heroItem.title}</h2>
 
                     <div className="badge" style={{ fontSize: 13 }}>
                       {normalizeTypeLabel(heroItem.type)}
                       {heroItem.provider ? ` • ${heroItem.provider}` : ""}
                     </div>
 
-					<div
-					style={{
-						marginTop: 18,
-						display: "flex",
-						gap: 14,
-						flexWrap: "wrap",
-						alignItems: "center",
-					}}
-					>
-					{/* Browse CTA */}
-					<button
-						className="btn"
-						style={{
-						padding: "12px 18px",
-						borderRadius: 14,
-						fontSize: 14,
-						fontWeight: 700,
-						boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
-						}}
-						onClick={() => {
-						document.getElementById("wgRowsStart")?.scrollIntoView({
-							behavior: "smooth",
-							block: "start",
-						});
-						}}
-					>
-						Browse Titles →
-					</button>
+                    <div style={{ marginTop: 18, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+                      <button
+                        className="btn"
+                        style={{ padding: "12px 18px", borderRadius: 14, fontSize: 14, fontWeight: 700, boxShadow: "0 6px 18px rgba(0,0,0,0.35)" }}
+                        onClick={() => {
+                          document.getElementById("wgRowsStart")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      >
+                        Browse Titles →
+                      </button>
 
-					{/* Hero Add Button */}
-					{heroItem && !myListIds.has(heroItem.watchmodeTitleId) ? (
-						<button
-						className="btn"
-						style={{
-							padding: "12px 18px",
-							borderRadius: 14,
-							fontSize: 14,
-							fontWeight: 700,
-							background: "var(--purple)",
-							boxShadow: "0 8px 24px rgba(109,40,217,0.45)",
-						}}
-						onClick={() => addToList(heroItem)}
-						>
-						+ Add to List
-						</button>
-					) : heroItem ? (
+                      {heroItem && !myListIds.has(heroItem.watchmodeTitleId) ? (
+                        <button
+                          className="btn"
+                          style={{ padding: "12px 18px", borderRadius: 14, fontSize: 14, fontWeight: 700, background: "var(--purple)", boxShadow: "0 8px 24px rgba(109,40,217,0.45)" }}
+                          onClick={() => addToList(heroItem)}
+                        >
+                          + Add to List
+                        </button>
+                      ) : heroItem ? (
+                        <button className="btn secondary" style={{ padding: "12px 18px", borderRadius: 14, fontSize: 15, fontWeight: 900 }} disabled>
+                          ✓ Added
+                        </button>
+                      ) : null}
+                    </div>
 
-						<button
-						className="btn secondary"
-						style={{
-							padding: "12px 18px",
-							borderRadius: 14,
-							fontSize: 15,
-							fontWeight: 900,
-						}}
-						disabled
-						>
-						✓ Added
-						</button>
-					) : null}
-					</div>
-<div
-  style={{
-    display: "flex",
-    justifyContent: "center",
-    marginTop: 62
-  }}
->
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 14,
-      padding: "8px 16px",
-      borderRadius: 999,
-      background: "rgba(0, 0, 0, 0.69)",
-      border: "1px solid rgba(255, 255, 255, 0.33)",
-      backdropFilter: "blur(6px)"
-    }}
-  >
- 
- <button
-  className="heroArrowBtn"
-  type="button"
-  onClick={() => setHeroIndex((i) => (i - 1 + trendingItems.length) % trendingItems.length)}
-  aria-label="Previous"
->
-<span className="heroArrow left">❮</span>
-</button>
-<div style={{ marginTop: 0, display: "flex", gap: 6 }}>
-  {trendingItems.map((_, i) => (
-    <div
-      key={i}
-      onClick={() => setHeroIndex(i)}
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: 999,
-        cursor: "pointer",
-        transition: "all 200ms ease",
-        background:
-          i === heroIndex
-            ? "var(--wg-purple)"
-            : "rgba(255, 255, 255, 0.5)",
-        transform: i === heroIndex ? "scale(1.2)" : "scale(1)"
-      }}
-    />
-  ))}
-</div>
+                    <div style={{ display: "flex", justifyContent: "center", marginTop: 62 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 14,
+                          padding: "8px 16px",
+                          borderRadius: 999,
+                          background: "rgba(0, 0, 0, 0.69)",
+                          border: "1px solid rgba(255, 255, 255, 0.33)",
+                          backdropFilter: "blur(6px)"
+                        }}
+                      >
+                        <button
+                          className="heroArrowBtn"
+                          type="button"
+                          onClick={() => setHeroIndex((i) => (i - 1 + trendingItems.length) % trendingItems.length)}
+                          aria-label="Previous"
+                        >
+                          <span className="heroArrow left">❮</span>
+                        </button>
 
-	<button
-		className="heroArrowBtn"
-		type="button"
-		onClick={() => setHeroIndex((i) => (i + 1) % trendingItems.length)}
-		aria-label="Next"
-	>
-		<span className="heroArrow right">❯</span>
-	</button>
-</div>
-</div>
+                        <div style={{ marginTop: 0, display: "flex", gap: 6 }}>
+                          {trendingItems.map((_, i) => (
+                            <div
+                              key={i}
+                              onClick={() => setHeroIndex(i)}
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 999,
+                                cursor: "pointer",
+                                transition: "all 200ms ease",
+                                background: i === heroIndex ? "var(--wg-purple)" : "rgba(255, 255, 255, 0.5)",
+                                transform: i === heroIndex ? "scale(1.2)" : "scale(1)"
+                              }}
+                            />
+                          ))}
+                        </div>
 
+                        <button className="heroArrowBtn" type="button" onClick={() => setHeroIndex((i) => (i + 1) % trendingItems.length)} aria-label="Next">
+                          <span className="heroArrow right">❯</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-			
           ) : null}
-
-
 
           {/* Provider-scoped search */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 30 }}>
@@ -699,21 +654,19 @@ const heroItem = trendingItems[heroIndex] ?? null;
                 </option>
               ))}
             </select>
-
-            
           </div>
 
           {rateLimited && (
-            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)", }}
-			
-			>
-              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode. Try again in a few minutes.</div>
+            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
+              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>
+                We’re temporarily rate-limited by Watchmode. Try again in a few minutes.
+              </div>
             </div>
           )}
 
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
 
-          {/* Search rail */}
+          {/* Search panel */}
           <div className={`searchPanel ${searchOpen ? "open" : ""}`}>
             <div className="searchPanelHeader">
               <div className="searchPanelTitle">
@@ -730,14 +683,12 @@ const heroItem = trendingItems[heroIndex] ?? null;
               <div className="rail">
                 {results.map((r) => {
                   const alreadyAdded = myListIds.has(r.watchmodeTitleId);
-
                   return (
                     <TitleCard
                       key={`${provider}-${r.watchmodeTitleId}`}
                       item={r}
                       onWatchUrlResolved={(url) => applyWatchUrl(r.watchmodeTitleId, url)}
-					  onPosterClick={() => setModalItem(r)} // for search result
-
+                      onPosterClick={() => setModalItem(r)}
                       action={
                         <button
                           className={`btn ${alreadyAdded ? "secondary" : ""}`}
@@ -759,36 +710,34 @@ const heroItem = trendingItems[heroIndex] ?? null;
           </div>
         </div>
 
-		{/*Browse Titles button anchor */}	
         <div id="wgRowsStart" />
 
-        {/* Rows - with loading rows skeleton shimmer*/}
+        {/* Rows */}
         {loading ? (
-		<div style={{ display: "grid", gap: 14 }}>
-			<div className="card">
-			<div className="skel skelText" style={{ width: 240, marginBottom: 10 }} />
-			<div className="skel skelText sm" style={{ width: 360 }} />
-			</div>
-
-			<div className="wgRow">
-			<div className="wgRowHeader">
-				<div className="wgRowTitleWrap">
-				<div className="skel skelText" style={{ width: 220 }} />
-				</div>
-				<div className="skel skelBtn" style={{ width: 120 }} />
-			</div>
-
-			<div className="rail">
-				{Array.from({ length: 6 }).map((_, i) => (
-				<div key={i} className="skel skelPoster" />
-				))}
-			</div>
-			</div>
-		</div>
-		) : (
-
           <div style={{ display: "grid", gap: 14 }}>
-            {(payload?.rows || []).map((row) => {
+            <div className="card">
+              <div className="skel skelText" style={{ width: 240, marginBottom: 10 }} />
+              <div className="skel skelText sm" style={{ width: 360 }} />
+            </div>
+
+            <div className="wgRow">
+              <div className="wgRowHeader">
+                <div className="wgRowTitleWrap">
+                  <div className="skel skelText" style={{ width: 220 }} />
+                </div>
+                <div className="skel skelBtn" style={{ width: 120 }} />
+              </div>
+
+              <div className="rail">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="skel skelPoster" />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 14 }}>
+            {renderedRows.map((row) => {
               const isMyList = row.kind === "my_list";
               const canLoadMore = !!row.canLoadMore;
               const isLoadingMore = !!loadingMore[row.key];
@@ -808,13 +757,12 @@ const heroItem = trendingItems[heroIndex] ?? null;
                   </div>
 
                   <div
-					className="rail"
-					style={{ maxWidth: "100%", minWidth: 0 }}
-					ref={(el) => {
-						railRefs.current[row.key] = el;
-					}}
->
-
+                    className="rail"
+                    style={{ maxWidth: "100%", minWidth: 0 }}
+                    ref={(el) => {
+                      railRefs.current[row.key] = el;
+                    }}
+                  >
                     {(row.items || []).map((it) => {
                       const alreadyAdded = !isMyList && myListIds.has(it.watchmodeTitleId);
 
@@ -823,15 +771,10 @@ const heroItem = trendingItems[heroIndex] ?? null;
                           key={`${row.key}-${it.watchmodeTitleId}`}
                           item={it}
                           onWatchUrlResolved={(url) => applyWatchUrl(it.watchmodeTitleId, url)}
-						  onPosterClick={() => setModalItem(it)} // for row item
-
+                          onPosterClick={() => setModalItem(it)}
                           action={
                             isMyList ? (
-                              <button
-                                className="btn danger"
-                                style={{ padding: "8px 9px", borderRadius: 10 }}
-                                onClick={() => removeFromList(it.watchmodeTitleId)}
-                              >
+                              <button className="btn danger" style={{ padding: "8px 9px", borderRadius: 10 }} onClick={() => removeFromList(it.watchmodeTitleId)}>
                                 – Remove
                               </button>
                             ) : (
@@ -854,26 +797,30 @@ const heroItem = trendingItems[heroIndex] ?? null;
               );
             })}
 
-            {!payload?.includeGenres ? (
+            {/* Curated genres CTA */}
+            {selectedGenreNum === null ? (
               <div className="card muted">
-                Click <b>Load genre rows</b> below to fetch Genre rows. Or select a Genre from the dropdown above.
-
-                <div style={{ marginTop: 10 }}>
-                  <button className="btn secondary" onClick={loadGenreRows}>
-                    Load genre rows
-                  </button>
+                Load curated genre rows below (3 at a time). Or select a specific Genre from the dropdown above.
+                <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {genresPage === 0 ? (
+                    <button className="btn secondary" onClick={loadGenresFirst} disabled={loadingGenres}>
+                      {loadingGenres ? "Loading…" : "Load genre rows"}
+                    </button>
+                  ) : canLoadMoreGenres ? (
+                    <button className="btn secondary" onClick={loadMoreGenres} disabled={loadingGenres}>
+                      {loadingGenres ? "Loading…" : "Load More Genres"}
+                    </button>
+                  ) : (
+                    <div className="muted">All curated genres loaded.</div>
+                  )}
                 </div>
               </div>
             ) : null}
           </div>
         )}
       </div>
-	  <TitleModal
-  open={!!modalItem}
-  item={modalItem}
-  onClose={() => setModalItem(null)}
-/>
 
+      <TitleModal open={!!modalItem} item={modalItem} onClose={() => setModalItem(null)} />
     </>
   );
 }

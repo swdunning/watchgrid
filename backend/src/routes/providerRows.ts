@@ -9,14 +9,14 @@ import { tmdbPosterUrl } from "../services/tmdbService"
 import { getGlobalRow, setGlobalRow } from "../services/globalRowCache"
 
 const router = Router()
-const LIMIT = 18
 
+const LIMIT = 18
+const GENRES_PAGE_SIZE = 3
 const DBG = process.env.WG_DEBUG_CACHE === "1"
 const GLOBAL_TTL_SECONDS = 24 * 60 * 60 // 24h
 
 // Dedupe refresh per key (in-memory, per backend instance)
 const refreshInFlight = new Map<string, Promise<void>>()
-
 // Dedupe "cold-start" awaited fetches per (provider/kind/mode)
 const fetchInFlight = new Map<string, Promise<void>>()
 
@@ -80,11 +80,6 @@ function normalizeProvider(raw: string): ProviderKey | null {
 	return ok ? (v as ProviderKey) : null
 }
 
-function asBool(raw: any): boolean {
-	const v = String(raw ?? "").toLowerCase()
-	return v === "1" || v === "true" || v === "yes"
-}
-
 async function buildItems(provider: ProviderKey, titles: any[]) {
 	const slice = (titles || []).slice(0, LIMIT)
 	return asyncPool(4, slice, async (t: any) => ({
@@ -138,8 +133,7 @@ function computePayloadTtlSeconds(payload: any, rateLimitedNow: boolean, staleGl
  * SWR helper:
  * - If cache has items (fresh OR stale): return immediately.
  * - If stale: refresh in background (deduped).
- * - If missing/empty: fetch once (await), then store.
- * Returns { items, rateLimited, staleUsed }
+ * - If missing/empty: fetch once (await), then store (cold-start deduped).
  */
 async function swrGlobalRow(args: {
 	provider: ProviderKey
@@ -150,11 +144,11 @@ async function swrGlobalRow(args: {
 	const cached = await getGlobalRow(args.provider, args.kind, args.mode)
 	const hasItems = (cached?.items?.length ?? 0) > 0
 
-	// ✅ If cache has items (fresh OR stale): serve immediately.
+	// If cache has items (fresh OR stale): serve immediately.
 	if (hasItems) {
 		const staleUsed = !cached!.isFresh
 
-		// If stale, refresh async but serve immediately (deduped)
+		// If stale, refresh in background but serve immediately
 		if (staleUsed) {
 			const refreshKey = `${args.kind}:${args.provider}:${args.mode}:US`
 			fireAndForgetRefresh(refreshKey, async () => {
@@ -163,7 +157,7 @@ async function swrGlobalRow(args: {
 				const res = await args.fetch()
 				const items = await buildItems(args.provider, res.titles)
 
-				// ✅ do NOT overwrite good cache with []
+				// do NOT overwrite good cache with []
 				if (!res.ok && items.length === 0) {
 					if (DBG) console.log(`[GRC-SWR] refresh failed key=${refreshKey} -> keep existing cache`)
 					return
@@ -185,7 +179,7 @@ async function swrGlobalRow(args: {
 		return { items: cached!.items as any[], rateLimited: cached!.status === "RATE_LIMITED", staleUsed }
 	}
 
-	// ✅ Cold-start path: dedupe awaited fetch per (provider/kind/mode)
+	// Cold-start: dedupe awaited fetch per (provider/kind/mode)
 	const fetchKey = `${args.kind}:${args.provider}:${args.mode}:US`.toUpperCase()
 
 	if (!fetchInFlight.has(fetchKey)) {
@@ -193,7 +187,7 @@ async function swrGlobalRow(args: {
 			const res = await args.fetch()
 			const items = await buildItems(args.provider, res.titles)
 
-			// If hard failure and no items, store short cooldown (prevents hammering)
+			// If failure and no items, store short cooldown
 			if (!res.ok && items.length === 0) {
 				await setGlobalRow({
 					provider: args.provider,
@@ -223,10 +217,8 @@ async function swrGlobalRow(args: {
 		fetchInFlight.set(fetchKey, p)
 	}
 
-	// Everyone awaits the same in-flight fetch
 	await fetchInFlight.get(fetchKey)
 
-	// Re-read from DB and return
 	const after = await getGlobalRow(args.provider, args.kind, args.mode)
 	return {
 		items: (after?.items as any[]) ?? [],
@@ -268,11 +260,20 @@ async function getNewOnItems(provider: ProviderKey, typesForMode?: "movie" | "tv
  * Global-cached: Genre row (any genreId)
  * mode: g<id>:all|tv|movie
  */
+/**
+ * Global-cached: Genre row (any genreId)
+ * Primary key: g<id>:all|tv|movie
+ *
+ * IMPORTANT:
+ * - If you ask for tv/movie and it's missing, but g<id>:all exists,
+ *   reuse g<id>:all and filter by item.type so dropdown loads instantly.
+ */
 async function getGenreItemsGlobal(provider: ProviderKey, genreId: number, typesForMode?: "movie" | "tv_series") {
-	const suffix = modeSuffixForTypes(typesForMode)
+	const suffix = modeSuffixForTypes(typesForMode) // all|tv|movie
 	const mode = `g${genreId}:${suffix}`
 
-	return swrGlobalRow({
+	// First try exact cache (tv/movie/all)
+	const exact = await swrGlobalRow({
 		provider,
 		kind: "genre",
 		mode,
@@ -288,6 +289,46 @@ async function getGenreItemsGlobal(provider: ProviderKey, genreId: number, types
 			return { ok: res.ok, rateLimited: res.rateLimited, titles: res.titles }
 		},
 	})
+
+	// If we got items, great.
+	if ((exact.items?.length ?? 0) > 0) return exact
+
+	// If we were asked for tv/movie and exact is empty, try reuse ALL cache (g<id>:all)
+	// This fixes: "Load Genres" populates ALL, dropdown asks TV/MOVIE and sees nothing.
+	if (suffix !== "all") {
+		const allMode = `g${genreId}:all`
+		const all = await swrGlobalRow({
+			provider,
+			kind: "genre",
+			mode: allMode,
+			fetch: async () => {
+				// One mixed Watchmode call (all types) as fallback
+				const res = await watchmodeListTitlesResult({
+					provider,
+					sortBy: "popularity_desc",
+					limit: LIMIT,
+					page: 1,
+					genreIds: [genreId],
+				})
+				return { ok: res.ok, rateLimited: res.rateLimited, titles: res.titles }
+			},
+		})
+
+		const filtered =
+			suffix === "tv"
+				? (all.items || []).filter((it: any) => String(it.type).toLowerCase().includes("tv"))
+				: (all.items || []).filter((it: any) => String(it.type).toLowerCase().includes("movie"))
+
+		// Return filtered results (don’t write them back — keep it simple + no churn)
+		return {
+			items: filtered.slice(0, LIMIT),
+			rateLimited: all.rateLimited,
+			staleUsed: all.staleUsed,
+		}
+	}
+
+	// Otherwise return exact (empty or cooldown)
+	return exact
 }
 
 /**
@@ -349,11 +390,17 @@ async function getPopularMovieItems(provider: ProviderKey) {
 	return { items, rateLimited: res.rateLimited }
 }
 
+function genreNameById(genres: { id: number; name: string }[], id: number) {
+	return genres.find((g) => g.id === id)?.name ?? null
+}
+
 /**
  * GET /api/provider/:provider/rows
  * mode=all|shows|movies
  * genreId=all|<number>
- * includeGenres=0|1
+ *
+ * NOTE: Option B — curated genres are now loaded via:
+ *   GET /api/provider/:provider/genres?page=1&mode=all
  */
 router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 	const userId = (req as any).userId as string
@@ -364,14 +411,13 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 	const mode = normalizeMode(req.query.mode)
 	const genreIdRaw = String(req.query.genreId ?? "all")
 	const genreId = genreIdRaw === "all" ? null : Number(genreIdRaw)
-	const includeGenres = asBool(req.query.includeGenres)
 
 	const hasProvider = await prisma.userProvider.findFirst({
 		where: { userId, provider: { equals: provider, mode: "insensitive" } },
 	})
 	if (!hasProvider) return res.status(403).json({ error: "Not authorized" })
 
-	// ✅ List signature — bust cache whenever user's list for this provider changes
+	// List signature — bust cache whenever user's list for this provider changes
 	const agg = await prisma.savedItem.aggregate({
 		where: { userId, provider: { equals: provider, mode: "insensitive" } },
 		_count: { _all: true },
@@ -381,7 +427,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 	const maxTs = agg._max.createdAt ? String(agg._max.createdAt.getTime()) : "0"
 	const listSig = `${agg._count._all}:${maxTs}`
 
-	const payloadCacheKey = `rows:${userId}:${provider}:${mode}:g=${genreIdRaw}:ig=${includeGenres ? "1" : "0"}:ls=${listSig}`
+	const payloadCacheKey = `rows:${userId}:${provider}:${mode}:g=${genreIdRaw}:ls=${listSig}`
 	const cachedPayload = await cacheGet<any>(payloadCacheKey)
 	if (cachedPayload) {
 		return res.json({
@@ -406,63 +452,126 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 
 	const typesForMode: "movie" | "tv_series" | undefined = mode === "shows" ? "tv_series" : mode === "movies" ? "movie" : undefined
 
-	const rows: any[] = []
-	rows.push({
-		key: "my_list",
-		kind: "my_list",
-		title: `My List • ${labelFor(provider)}`,
-		page: 1,
-		canLoadMore: false,
-		items: myListItems,
-	})
+	const rows: any[] = [
+		{
+			key: "my_list",
+			kind: "my_list",
+			title: `My List • ${labelFor(provider)}`,
+			page: 1,
+			canLoadMore: false,
+			items: myListItems,
+		},
+	]
 
 	let rateLimitedNow = watchmodeWasRateLimitedRecently()
 	let staleGlobalUsed = false
 
-	// If specific genre selected -> build 3 rows, but now genre rows are global-cached
+	// If specific genre selected -> 3 rows (genre rows are global-cached)
+	// If specific genre selected -> show genre rows
 	if (genreId && Number.isFinite(genreId)) {
-		// Genre TV (global-cached)
+		const rowsOut: any[] = []
+
+		// Always include My List first
+		rowsOut.push(rows[0])
+
+		const allGenres = await watchmodeGetGenres()
+		const genreName = genreNameById(allGenres, genreId) // e.g. "Drama"
+		const genreSuffix = genreName ? ` - ${genreName}` : ""
+
+		// If user is in "shows" mode, only show TV genre row
+		if (mode === "shows") {
+			const gTv = await getGenreItemsGlobal(provider, genreId, "tv_series")
+			rateLimitedNow = rateLimitedNow || gTv.rateLimited
+			staleGlobalUsed = staleGlobalUsed || gTv.staleUsed
+
+			const payload = {
+				provider,
+				label: labelFor(provider),
+				mode,
+				genreId,
+				rateLimited: watchmodeWasRateLimitedRecently(),
+				rows: [
+					...rowsOut,
+					{
+						key: "genre_tv",
+						kind: "genre_tv",
+						title: `Most popular TV shows ${genreSuffix}`,
+						page: 1,
+						canLoadMore: (gTv.items || []).length > 0,
+						genreId,
+						items: gTv.items || [],
+					},
+				],
+			}
+
+			const ttl = computePayloadTtlSeconds(payload, rateLimitedNow, staleGlobalUsed)
+			await cacheSet(payloadCacheKey, payload, ttl)
+			return res.json(payload)
+		}
+
+		// If user is in "movies" mode, only show Movie genre row
+		if (mode === "movies") {
+			const gMv = await getGenreItemsGlobal(provider, genreId, "movie")
+			rateLimitedNow = rateLimitedNow || gMv.rateLimited
+			staleGlobalUsed = staleGlobalUsed || gMv.staleUsed
+
+			const payload = {
+				provider,
+				label: labelFor(provider),
+				mode,
+				genreId,
+				rateLimited: watchmodeWasRateLimitedRecently(),
+				rows: [
+					...rowsOut,
+					{
+						key: "genre_movies",
+						kind: "genre_movies",
+						title: `Most popular Movies ${genreSuffix}`,
+						page: 1,
+						canLoadMore: (gMv.items || []).length > 0,
+						genreId,
+						items: gMv.items || [],
+					},
+				],
+			}
+
+			const ttl = computePayloadTtlSeconds(payload, rateLimitedNow, staleGlobalUsed)
+			await cacheSet(payloadCacheKey, payload, ttl)
+			return res.json(payload)
+		}
+
+		// mode === "all" -> show BOTH (this will now reuse GENRE:*:Gid:ALL cache if present)
 		const gTv = await getGenreItemsGlobal(provider, genreId, "tv_series")
 		rateLimitedNow = rateLimitedNow || gTv.rateLimited
 		staleGlobalUsed = staleGlobalUsed || gTv.staleUsed
 
-		// Genre Movies (global-cached)
 		const gMv = await getGenreItemsGlobal(provider, genreId, "movie")
 		rateLimitedNow = rateLimitedNow || gMv.rateLimited
 		staleGlobalUsed = staleGlobalUsed || gMv.staleUsed
 
-		// Popular rows are still global-cached via existing functions (optional to include here)
 		const payload = {
 			provider,
 			label: labelFor(provider),
 			mode,
 			genreId,
-			includeGenres: false,
 			rateLimited: watchmodeWasRateLimitedRecently(),
 			rows: [
-				{
-					key: "my_list",
-					kind: "my_list",
-					title: `My List • ${labelFor(provider)}`,
-					page: 1,
-					canLoadMore: false,
-					items: myListItems,
-				},
+				...rowsOut,
 				{
 					key: "genre_tv",
 					kind: "genre_tv",
-					title: "Most popular TV shows (USA)",
+					title: `Most popular TV shows ${genreSuffix}`,
 					page: 1,
-					canLoadMore: (gTv.items || []).length === LIMIT,
+					canLoadMore: (gTv.items || []).length > 0,
 					genreId,
 					items: gTv.items || [],
 				},
 				{
 					key: "genre_movies",
 					kind: "genre_movies",
-					title: "Most popular movies (USA)",
+					title: `Most popular movies ${genreSuffix}`,
 					page: 1,
-					canLoadMore: (gMv.items || []).length === LIMIT,
+					canLoadMore: (gMv.items || []).length > 0,
 					genreId,
 					items: gMv.items || [],
 				},
@@ -474,7 +583,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		return res.json(payload)
 	}
 
-	// ✅ DB-first popular TV
+	// Popular TV
 	if (mode !== "movies") {
 		const tv = await getPopularTvItems(provider)
 		rateLimitedNow = rateLimitedNow || tv.rateLimited
@@ -484,13 +593,13 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 			kind: "popular_tv",
 			title: "Most popular TV shows (USA)",
 			page: 1,
-			// ✅ Always allow Load More if we have any items; browse endpoint will decide if more pages exist.
+			// Always allow Load More if items exist; browse decides if more pages exist.
 			canLoadMore: (tv.items || []).length > 0,
 			items: tv.items || [],
 		})
 	}
 
-	// ✅ DB-first popular Movies
+	// Popular Movies
 	if (mode !== "shows") {
 		const mv = await getPopularMovieItems(provider)
 		rateLimitedNow = rateLimitedNow || mv.rateLimited
@@ -500,13 +609,13 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 			kind: "popular_movies",
 			title: "Most popular movies (USA)",
 			page: 1,
-			// ✅ Always allow Load More if we have any items; browse endpoint will decide if more pages exist.
+			// Always allow Load More if items exist; browse decides if more pages exist.
 			canLoadMore: (mv.items || []).length > 0,
 			items: mv.items || [],
 		})
 	}
 
-	// ✅ Global-cached: New on this service (SWR)
+	// New on this service (SWR global)
 	const newOn = await getNewOnItems(provider, typesForMode)
 	rateLimitedNow = rateLimitedNow || newOn.rateLimited
 	staleGlobalUsed = staleGlobalUsed || newOn.staleUsed
@@ -514,56 +623,112 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 	rows.push({
 		key: "new",
 		kind: "new",
-		title: "New on this service",
+		title: `New on  ${labelFor(provider)}`,
 		page: 1,
 		canLoadMore: (newOn.items || []).length === LIMIT,
 		items: newOn.items || [],
 	})
 
-	// ✅ Global-cached: Genre rows when includeGenres=1 (SWR)
-	if (includeGenres) {
-		const { comedyId, dramaId, scifiId, actionId, mysteryId, docId } = await getCuratedGenreIds()
-
-		const genreDefs: { key: string; title: string; id: number | null }[] = [
-			{ key: "comedy", title: "Most popular comedies", id: comedyId },
-			{ key: "drama", title: "Most popular drama", id: dramaId },
-			{ key: "scifi", title: "Most popular Sci-fi/Fantasy", id: scifiId },
-			{ key: "action", title: "Most popular action", id: actionId },
-			{ key: "mystery", title: "Most popular mysteries", id: mysteryId },
-			{ key: "docs", title: "Most popular documentaries", id: docId },
-		].filter((g) => !!g.id)
-
-		const genreRows = await asyncPool(1, genreDefs, async (g) => {
-			const gr = await getGenreItemsGlobal(provider, g.id as number, typesForMode)
-			rateLimitedNow = rateLimitedNow || gr.rateLimited
-			staleGlobalUsed = staleGlobalUsed || gr.staleUsed
-
-			return {
-				key: g.key,
-				kind: "genre",
-				genreId: g.id,
-				title: g.title,
-				page: 1,
-				canLoadMore: (gr.items || []).length === LIMIT,
-				items: gr.items || [],
-			}
-		})
-
-		rows.push(...genreRows)
-	}
-
-	const payload = {
+	const payload: any = {
 		provider,
 		label: labelFor(provider),
 		mode,
 		genreId: null,
-		includeGenres,
 		rateLimited: watchmodeWasRateLimitedRecently(),
 		rows,
 	}
 
 	const ttl = computePayloadTtlSeconds(payload, rateLimitedNow, staleGlobalUsed)
 	await cacheSet(payloadCacheKey, payload, ttl)
+
+	return res.json(payload)
+})
+
+/**
+ * Option B:
+ * GET /api/provider/:provider/genres
+ * mode=all|shows|movies
+ * page=<number> (1-based)
+ *
+ * Returns ONLY curated genre rows (3 at a time) + paging metadata.
+ */
+router.get("/provider/:provider/genres", requireAuth, async (req, res) => {
+	const userId = (req as any).userId as string
+
+	const provider = normalizeProvider(req.params.provider)
+	if (!provider) return res.status(400).json({ error: "Invalid provider" })
+
+	const mode = normalizeMode(req.query.mode)
+	const page = Math.max(1, Number(req.query.page ?? 1))
+
+	const hasProvider = await prisma.userProvider.findFirst({
+		where: { userId, provider: { equals: provider, mode: "insensitive" } },
+	})
+	if (!hasProvider) return res.status(403).json({ error: "Not authorized" })
+
+	// Payload cache key (per-user, because provider access is user-scoped)
+	const genresPayloadKey = `genres:${userId}:${provider}:${mode}:p=${page}`
+	const cached = await cacheGet<any>(genresPayloadKey)
+	if (cached) {
+		return res.json({
+			...cached,
+			rateLimited: watchmodeWasRateLimitedRecently(),
+		})
+	}
+
+	const typesForMode: "movie" | "tv_series" | undefined = mode === "shows" ? "tv_series" : mode === "movies" ? "movie" : undefined
+
+	const { comedyId, dramaId, scifiId, actionId, mysteryId, docId } = await getCuratedGenreIds()
+
+	const allGenreDefs: { key: string; title: string; id: number | null }[] = [
+		{ key: "comedy", title: "Most popular comedies", id: comedyId },
+		{ key: "drama", title: "Most popular drama", id: dramaId },
+		{ key: "scifi", title: "Most popular Sci-fi/Fantasy", id: scifiId },
+		{ key: "action", title: "Most popular action", id: actionId },
+		{ key: "mystery", title: "Most popular mysteries", id: mysteryId },
+		{ key: "docs", title: "Most popular documentaries", id: docId },
+	].filter((g) => !!g.id)
+
+	const total = allGenreDefs.length
+	const start = (page - 1) * GENRES_PAGE_SIZE
+	const end = start + GENRES_PAGE_SIZE
+	const slice = allGenreDefs.slice(start, end)
+
+	let rateLimitedNow = watchmodeWasRateLimitedRecently()
+	let staleGlobalUsed = false
+
+	// Important: keep this at 1 to avoid Watchmode 429 storms
+	const rows = await asyncPool(1, slice, async (g) => {
+		const gr = await getGenreItemsGlobal(provider, g.id as number, typesForMode)
+		rateLimitedNow = rateLimitedNow || gr.rateLimited
+		staleGlobalUsed = staleGlobalUsed || gr.staleUsed
+
+		return {
+			key: `genre_${String(g.id)}`, // unique and stable
+			kind: "genre",
+			title: g.title,
+			page: 1,
+			genreId: g.id,
+			// Allow Load More if we have any items; browse will decide if more pages exist.
+			canLoadMore: (gr.items || []).length > 0,
+			items: gr.items || [],
+		}
+	})
+
+	const payload: any = {
+		provider,
+		label: labelFor(provider),
+		mode,
+		page,
+		pageSize: GENRES_PAGE_SIZE,
+		total,
+		canLoadMore: end < total,
+		rows,
+		rateLimited: watchmodeWasRateLimitedRecently(),
+	}
+
+	const ttl = computePayloadTtlSeconds(payload, rateLimitedNow, staleGlobalUsed)
+	await cacheSet(genresPayloadKey, payload, ttl)
 
 	return res.json(payload)
 })
