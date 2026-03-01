@@ -617,8 +617,8 @@ export default function ProviderPage() {
           {/* Provider-scoped search */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 30 }}>
             <input
-              className="input"
-              style={{ maxWidth: 560 }}
+              className="inputSearch"
+              style={{ maxWidth: 480 }}
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onFocus={() => setSearchOpen(true)}
@@ -630,8 +630,22 @@ export default function ProviderPage() {
             </button>
           </div>
 
-          {/* Mode buttons */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+         
+          {/* Genre selector */}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 26, alignItems: "center" }}>
+            <div className="muted"> Select a Genre:</div>
+            <select className="input" style={{ maxWidth: 440 }} value={genreId} onChange={(e) => setGenreId(e.target.value)}>
+              <option value="all">All</option>
+              {genres.map((g) => (
+                <option key={g.id} value={String(g.id)}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+ 		
+		{/* Mode buttons */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 36 }}>
             <button className={`btn ${mode === "all" ? "" : "secondary"}`} onClick={() => setMode("all")}>
               TV Shows & Movies
             </button>
@@ -641,19 +655,6 @@ export default function ProviderPage() {
             <button className={`btn ${mode === "movies" ? "" : "secondary"}`} onClick={() => setMode("movies")}>
               Movies
             </button>
-          </div>
-
-          {/* Genre selector */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
-            <div className="muted">Select a Genre:</div>
-            <select className="input" style={{ maxWidth: 320 }} value={genreId} onChange={(e) => setGenreId(e.target.value)}>
-              <option value="all">All</option>
-              {genres.map((g) => (
-                <option key={g.id} value={String(g.id)}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           {rateLimited && (
@@ -800,7 +801,7 @@ export default function ProviderPage() {
             {/* Curated genres CTA */}
             {selectedGenreNum === null ? (
               <div className="card muted">
-                Load genre rows below (3 at a time). Or select a specific Genre from the dropdown above.
+                Load genre rows below. Or select a specific Genre from the dropdown above.
                 <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {genresPage === 0 ? (
                     <button className="btn secondary" onClick={loadGenresFirst} disabled={loadingGenres}>

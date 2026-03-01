@@ -1,4 +1,4 @@
-//TitleCard.tsx
+// TitleCard.tsx
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
@@ -17,14 +17,11 @@ export type CardItem = {
 
 const formatTypeLabel = (type: string) => {
   const t = type.toLowerCase();
-
   if (t.includes("tv")) return "Series";
   if (t.includes("movie")) return "Movie";
 
   // fallback: Title Case
-  return type
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 export default function TitleCard({
@@ -32,17 +29,18 @@ export default function TitleCard({
   action,
   onWatchUrlResolved,
   onPosterClick,
+  onCardClick, // ✅ new: whole-card click
 }: {
   item: CardItem;
   action?: React.ReactNode;
   onWatchUrlResolved?: (url: string | null) => void;
   onPosterClick?: (item: CardItem) => void;
+  onCardClick?: (item: CardItem) => void; // ✅ new
 }) {
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(item.watchUrl ?? null);
   const [opening, setOpening] = useState(false);
 
-  // ✅ If parent later patches item.watchUrl (e.g. via onWatchUrlResolved),
-  // keep local state in sync so the button becomes a real <a>.
+  // keep local resolvedUrl in sync if parent patches item.watchUrl later
   useEffect(() => {
     if (item.watchUrl && item.watchUrl !== resolvedUrl) {
       setResolvedUrl(item.watchUrl);
@@ -90,7 +88,7 @@ export default function TitleCard({
 
       const url = res?.watchUrl ?? null;
 
-      // ✅ Tell parent so it can patch list/search rows
+      // tell parent so it can patch state
       onWatchUrlResolved?.(url);
 
       if (!url) {
@@ -111,49 +109,38 @@ export default function TitleCard({
     }
   };
 
-  const posterClickable = !!onPosterClick;
+  /**
+   * Teaching note:
+   * - We make the whole card clickable by putting onClick on the wrapper.
+   * - BUT buttons/links inside the card would also trigger that click because events "bubble".
+   * - So we stop bubbling for the actions area and the Open link/button.
+   */
+  const cardClickable = !!onCardClick || !!onPosterClick;
+  const handleCardClick = () => {
+    if (onCardClick) return onCardClick(item);
+    if (onPosterClick) return onPosterClick(item);
+  };
 
   return (
-    <div className="posterCard">
+    <div
+      className="posterCard"
+      role={cardClickable ? "button" : undefined}
+      tabIndex={cardClickable ? 0 : undefined}
+      onClick={cardClickable ? handleCardClick : undefined}
+      onKeyDown={
+        cardClickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleCardClick();
+              }
+            }
+          : undefined
+      }
+      style={cardClickable ? { cursor: "pointer" } : undefined}
+    >
       {item.poster ? (
-        posterClickable ? (
-          <button
-            type="button"
-            onClick={() => onPosterClick?.(item)}
-            aria-label={`Open details for ${item.title}`}
-            style={{
-              all: "unset",
-              display: "block",
-              width: "100%",
-              cursor: "pointer",
-            }}
-          >
-            <img
-  className="posterImg"
-  src={item.poster ?? undefined}
-  alt={item.title}
-  loading="lazy"
-  decoding="async"
-/>
-          </button>
-        ) : (
-          <img
-  className="posterImg"
-  src={item.poster ?? undefined}
-  alt={item.title}
-  loading="lazy"
-  decoding="async"
-/>
-        )
-      ) : posterClickable ? (
-        <button
-          type="button"
-          onClick={() => onPosterClick?.(item)}
-          aria-label={`Open details for ${item.title}`}
-          style={{ all: "unset", display: "block", width: "100%", cursor: "pointer" }}
-        >
-          <div className="posterImg" />
-        </button>
+        <img className="posterImg" src={item.poster ?? undefined} alt={item.title} loading="lazy" decoding="async" />
       ) : (
         <div className="posterImg" />
       )}
@@ -163,21 +150,36 @@ export default function TitleCard({
           {item.title}
         </p>
 
-		<div className="badge">
-			{formatTypeLabel(item.type)}
-			{item.provider ? ` • ${item.provider}` : ""}
-		</div>
+        <div className="badge">
+          {formatTypeLabel(item.type)}
+          {item.provider ? ` • ${item.provider}` : ""}
+        </div>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        {/* ✅ Stop clicks in the action area from opening the modal */}
+        <div
+          style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           {resolvedUrl ? (
-            <a className="btn secondary" style={openStyle} href={resolvedUrl} target="_blank" rel="noreferrer noopener">
+            <a
+              className="btn secondary"
+              style={openStyle}
+              href={resolvedUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              onClick={(e) => e.stopPropagation()}
+            >
               Open
             </a>
           ) : (
             <button
               className="btn secondary"
               style={openStyle}
-              onClick={handleOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpen();
+              }}
               disabled={opening || !item.provider}
               title={!item.provider ? "No provider available to resolve link" : "Open on provider"}
             >
@@ -185,6 +187,7 @@ export default function TitleCard({
             </button>
           )}
 
+          {/* action is usually +Add / Remove, etc. */}
           {action}
         </div>
       </div>

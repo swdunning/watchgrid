@@ -324,6 +324,18 @@ a.btn:hover {
 }
 
 .input {
+	height: 30px;
+	width: 100%;
+	padding: 12px 14px;
+	border-radius: 12px;
+	border: 1px solid var(--border);
+	background: rgba(0, 0, 0, 0.35);
+	color: var(--text);
+	outline: none;
+}
+
+.inputSearch {
+	height: 44px;
 	width: 100%;
 	padding: 12px 14px;
 	border-radius: 12px;
@@ -574,4 +586,843 @@ a.btn:hover {
 		opacity: 1;
 		transform: scale(1);
 	}
+}
+
+/* ===== WatchGrid Landing ===== */
+
+.wgLanding {
+	max-width: 1100px;
+	margin: 0 auto;
+	padding: 24px 14px 60px;
+}
+
+.wgLandingHero {
+	position: relative;
+	border-radius: 22px;
+	padding: 26px;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	background: var(--panel);
+}
+
+.wgLandingHeroBg {
+	position: absolute;
+	inset: -40px;
+	background:
+		radial-gradient(600px 300px at 20% 10%, rgba(109, 40, 217, 0.35), transparent 60%),
+		radial-gradient(500px 260px at 80% 30%, rgba(255, 255, 255, 0.10), transparent 55%),
+		radial-gradient(700px 380px at 60% 100%, rgba(76, 29, 149, 0.35), transparent 65%);
+	filter: blur(2px);
+	opacity: 0.95;
+}
+
+.wgLandingHeroInner {
+	position: relative;
+	display: grid;
+	grid-template-columns: 1.2fr 0.9fr;
+	gap: 22px;
+	align-items: center;
+}
+
+@media (max-width: 900px) {
+	.wgLandingHeroInner {
+		grid-template-columns: 1fr;
+	}
+
+	.wgHeroRight {
+		display: none;
+	}
+}
+
+.wgKicker {
+	display: inline-flex;
+	padding: 6px 10px;
+	border-radius: 999px;
+	border: 1px solid var(--border);
+	background: rgba(255, 255, 255, 0.04);
+	font-weight: 800;
+	font-size: 12px;
+	letter-spacing: 0.2px;
+	color: var(--text);
+}
+
+.wgHeroTitle {
+	margin: 12px 0 10px;
+	font-size: 42px;
+	line-height: 1.05;
+}
+
+@media (max-width: 520px) {
+	.wgHeroTitle {
+		font-size: 34px;
+	}
+}
+
+.wgHeroSub {
+	margin: 0;
+	color: var(--muted);
+	font-size: 15px;
+	line-height: 1.5;
+	max-width: 58ch;
+}
+
+.wgHeroCtas {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-top: 14px;
+}
+
+.wgHeroMicro {
+	margin-top: 12px;
+	font-size: 13px;
+	color: var(--muted);
+}
+
+/* mock product card */
+.wgMockCard {
+	border-radius: 18px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	background: rgba(0, 0, 0, 0.35);
+	box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+	overflow: hidden;
+}
+
+.wgMockHeader {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wgMockDot {
+	width: 10px;
+	height: 10px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.14);
+}
+
+.wgMockPill {
+	margin-left: auto;
+	padding: 6px 10px;
+	border-radius: 999px;
+	background: rgba(109, 40, 217, 0.16);
+	border: 1px solid rgba(109, 40, 217, 0.35);
+	font-weight: 900;
+	font-size: 12px;
+}
+
+.wgMockRows {
+	padding: 12px;
+	display: grid;
+	gap: 12px;
+}
+
+.wgMockRowTitle {
+	font-weight: 900;
+	font-size: 13px;
+	margin-bottom: 8px;
+}
+
+.wgMockRail {
+	display: flex;
+	gap: 10px;
+	overflow: hidden;
+}
+
+.wgMockPoster {
+	width: 76px;
+	height: 114px;
+	border-radius: 14px;
+	background: linear-gradient(140deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02));
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* marquee */
+.wgLandingMarquee {
+	position: relative;
+	margin-top: 14px;
+	border-radius: 18px;
+	border: 1px solid var(--border);
+	background: rgba(255, 255, 255, 0.03);
+	overflow: hidden;
+	padding: 14px 0;
+}
+
+.wgMarqueeTrack {
+	display: flex;
+	gap: 12px;
+	width: max-content;
+	animation: wgMarquee 28s linear infinite;
+	padding: 0 14px;
+}
+
+@keyframes wgMarquee {
+	from {
+		transform: translateX(0);
+	}
+
+	to {
+		transform: translateX(-33.333%);
+	}
+}
+
+.wgMarqueeFadeLeft,
+.wgMarqueeFadeRight {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 80px;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.wgMarqueeFadeLeft {
+	left: 0;
+	background: linear-gradient(90deg, rgba(6, 5, 10, 1), rgba(6, 5, 10, 0));
+}
+
+.wgMarqueeFadeRight {
+	right: 0;
+	background: linear-gradient(270deg, rgba(6, 5, 10, 1), rgba(6, 5, 10, 0));
+}
+
+.wgLogoChip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	min-width: 120px;
+	height: 44px;
+	padding: 0 14px;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	background: rgba(0, 0, 0, 0.22);
+}
+
+.wgLogoChip img {
+	height: 20px;
+	width: auto;
+	opacity: 0.95;
+	filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.35));
+}
+
+.wgLogoChip span {
+	color: var(--text);
+	font-weight: 900;
+	font-size: 12px;
+	letter-spacing: 0.2px;
+}
+
+.wgLogoSkel {
+	min-width: 120px;
+	height: 44px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* sections */
+.wgLandingSection {
+	margin-top: 18px;
+	padding: 18px;
+	border-radius: 18px;
+	border: 1px solid var(--border);
+	background: var(--panel);
+}
+
+.wgSectionTitle {
+	font-weight: 1000;
+	font-size: 16px;
+	margin-bottom: 12px;
+}
+
+.wgCardGrid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 12px;
+}
+
+@media (max-width: 900px) {
+	.wgCardGrid {
+		grid-template-columns: 1fr;
+	}
+}
+
+.wgInfoCard {
+	border-radius: 16px;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	background: rgba(255, 255, 255, 0.03);
+	padding: 14px;
+}
+
+.wgInfoTitle {
+	font-weight: 1000;
+	margin-bottom: 6px;
+}
+
+.wgInfoBody {
+	color: var(--muted);
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+/* demo rails */
+.wgDemoWall {
+	display: grid;
+	gap: 14px;
+}
+
+.wgDemoRailTitle {
+	font-weight: 1000;
+	margin-bottom: 8px;
+}
+
+.wgDemoTrack {
+	display: flex;
+	gap: 10px;
+	overflow: hidden;
+	width: 100%;
+	will-change: transform;
+}
+
+.wgDemoPoster {
+	width: 92px;
+	height: 138px;
+	border-radius: 16px;
+	background: linear-gradient(135deg, rgba(109, 40, 217, 0.18), rgba(255, 255, 255, 0.04));
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	flex: 0 0 auto;
+}
+
+.wgDemoTrack-slow {
+	animation: wgRail 26s linear infinite;
+}
+
+.wgDemoTrack-medium {
+	animation: wgRail 20s linear infinite;
+}
+
+.wgDemoTrack-fast {
+	animation: wgRail 14s linear infinite;
+}
+
+@keyframes wgRail {
+	from {
+		transform: translateX(0);
+	}
+
+	to {
+		transform: translateX(-50%);
+	}
+}
+
+.wgDemoNote {
+	margin-top: 10px;
+}
+
+/* footer cta */
+.wgLandingFooterCta {
+	padding: 0;
+	background: transparent;
+	border: none;
+}
+
+.wgFooterBox {
+	display: flex;
+	justify-content: space-between;
+	gap: 14px;
+	flex-wrap: wrap;
+	align-items: center;
+
+	border-radius: 18px;
+	border: 1px solid rgba(109, 40, 217, 0.35);
+	background: rgba(109, 40, 217, 0.10);
+	padding: 18px;
+}
+
+.wgFooterTitle {
+	font-weight: 1100;
+	font-size: 16px;
+}
+
+.wgFooterBody {
+	margin-top: 4px;
+}
+
+/* ===== Landing (full-width, trakt-style collage sections) ===== */
+
+.wgLandingFull {
+	width: 100%;
+}
+
+/* common section */
+.wgSection {
+	position: relative;
+	width: 100%;
+	overflow: hidden;
+}
+
+/* inner content width (not a boxed border; just readable text width) */
+.wgSectionInner {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 48px 16px;
+}
+
+@media (max-width: 720px) {
+	.wgSectionInner {
+		padding: 36px 14px;
+	}
+}
+
+/* HERO */
+.wgHeroSection {
+	min-height: calc(100vh - 68px);
+	display: grid;
+	place-items: center;
+	padding: 34px 16px 60px;
+}
+
+.wgHeroBackdrop {
+	position: absolute;
+	inset: -60px;
+	background:
+		radial-gradient(700px 340px at 50% 10%, rgba(109, 40, 217, 0.40), transparent 60%),
+		radial-gradient(800px 420px at 20% 90%, rgba(76, 29, 149, 0.35), transparent 65%),
+		radial-gradient(900px 520px at 90% 70%, rgba(255, 255, 255, 0.08), transparent 65%);
+	filter: blur(2px);
+	opacity: 0.95;
+}
+
+.wgHeroCenter {
+	position: relative;
+	width: 100%;
+	max-width: 980px;
+	text-align: center;
+}
+
+.wgHeroLogo {
+	display: flex;
+	justify-content: center;
+	margin-bottom: 10px;
+}
+
+.wgLogoText {
+	font-weight: 1100;
+	font-size: 22px;
+	letter-spacing: 0.3px;
+	padding: 10px 14px;
+	border-radius: 14px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.wgHeroKicker {
+	display: inline-flex;
+	padding: 7px 12px;
+	border-radius: 10px;
+	border: px solid rgba(255, 255, 255, 0.10);
+	background: rgba(255, 255, 255, 0.04);
+	font-weight: 900;
+	font-size: 16px;
+}
+
+.wgHeroTitle {
+	margin: 14px 0 10px;
+	font-size: 48px;
+	line-height: 1.05;
+}
+
+@media (max-width: 560px) {
+	.wgHeroTitle {
+		font-size: 36px;
+	}
+}
+
+.wgHeroSub {
+	margin: 0 auto;
+	max-width: 70ch;
+	color: var(--muted);
+	font-size: 15px;
+	line-height: 1.55;
+}
+
+.wgHeroCtas {
+	margin-top: 16px;
+	display: flex;
+	justify-content: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+/* mock screen */
+.wgHeroMock {
+	margin: 26px auto 0;
+	max-width: 980px;
+	border-radius: 22px;
+	overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	background: rgba(0, 0, 0, 0.35);
+	box-shadow: 0 22px 90px rgba(0, 0, 0, 0.6);
+	text-align: left;
+}
+
+.wgMockTopBar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 12px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wgMockDot {
+	width: 10px;
+	height: 10px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.14);
+}
+
+.wgMockPill {
+	margin-left: auto;
+	padding: 6px 10px;
+	border-radius: 999px;
+	background: rgba(109, 40, 217, 0.16);
+	border: 1px solid rgba(109, 40, 217, 0.35);
+	font-weight: 1000;
+	font-size: 12px;
+}
+
+.wgMockBody {
+	padding: 14px;
+	display: grid;
+	gap: 14px;
+}
+
+.wgMockRowTitle {
+	font-weight: 1000;
+	font-size: 13px;
+	margin-bottom: 8px;
+}
+
+.wgMockRail {
+	display: flex;
+	gap: 10px;
+	overflow: hidden;
+}
+
+.wgMockPosterSkel {
+	width: 86px;
+	height: 128px;
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wgMockPosterImg {
+	width: 86px;
+	height: 128px;
+	border-radius: 16px;
+	object-fit: cover;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* LOGO COLLAGE SECTION */
+.wgLogosSection {
+	min-height: 420px;
+}
+
+/* .wgCollageBg {
+	position: absolute;
+	inset: -80px;
+	background-size: 210px auto;
+	background-position: center;
+	background-repeat: repeat;
+	filter: saturate(1.05) contrast(1.05);
+	transform: rotate(-2deg) scale(1.06);
+	opacity: 0.50;
+} */
+
+.wgCollageOverlay {
+	position: absolute;
+	inset: 0;
+	background:
+		radial-gradient(700px 320px at 50% 20%, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.60) 70%),
+		linear-gradient(180deg, rgba(6, 5, 10, 0.40), rgba(6, 5, 10, 0.12));
+}
+
+/* Replace the old wgCollageBg approach */
+.wgCollageWall {
+	position: absolute;
+	inset: -140px;
+	z-index: 0;
+
+	display: grid;
+	grid-template-columns: repeat(12, 1fr);
+	gap: 10px;
+
+	opacity: 0.35;
+	/* <-- collage transparency knob */
+	filter: saturate(1.05) contrast(1.05);
+
+	/* “Bowed / curved wall” illusion */
+	transform:
+		perspective(1400px) rotateX(18deg) rotateZ(-7deg) translateY(-30px) scale(1.12);
+
+	transform-origin: 50% 20%;
+
+	/* soft fade at edges like trakt */
+	mask-image: radial-gradient(circle at 50% 35%, rgba(0, 0, 0, 1) 55%, rgba(0, 0, 0, 0) 100%);
+	-webkit-mask-image: radial-gradient(circle at 50% 35%, rgba(0, 0, 0, 1) 55%, rgba(0, 0, 0, 0) 100%);
+}
+
+.wgCollageWall img {
+	width: 90%;
+	aspect-ratio: 3 / 4;
+	object-fit: cover;
+	border-radius: 14px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: 0 18px 46px rgba(0, 0, 0, 0.55);
+}
+
+/* Optional: make it feel slightly “bowed” by scaling center tiles subtly */
+.wgCollageWall img:nth-child(6n + 3),
+.wgCollageWall img:nth-child(6n + 4) {
+	transform: translateY(-4px) scale(1.03);
+}
+
+.wgSectionHeading {
+	position: relative;
+	text-align: center;
+	margin-left: auto;
+	margin-right: auto;
+	font-weight: 1100;
+	font-size: 36px;
+}
+
+.wgSectionSub {
+	position: relative;
+	text-align: center;
+	margin-left: auto;
+	margin-right: auto;
+	margin-top: 8px;
+	max-width: 70ch;
+	font-size: 22px;
+}
+
+/* big marquee */
+.wgLogoMarquee {
+	position: relative;
+	margin-top: 20px;
+	overflow: hidden;
+}
+
+.wgMarqueeTrackBig {
+	display: flex;
+	gap: 34px;
+	width: max-content;
+	animation: wgMarqueeBig 26s linear infinite;
+	padding: 8px 0;
+	align-items: center;
+}
+
+@keyframes wgMarqueeBig {
+	from {
+		transform: translateX(0);
+	}
+
+	to {
+		transform: translateX(-33.333%);
+	}
+}
+
+.wgMarqueeFadeLeft,
+.wgMarqueeFadeRight {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 120px;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.wgMarqueeFadeLeft {
+	left: 0;
+	background: linear-gradient(90deg, rgba(6, 5, 10, 1), rgba(6, 5, 10, 0));
+}
+
+.wgMarqueeFadeRight {
+	right: 0;
+	background: linear-gradient(270deg, rgba(6, 5, 10, 1), rgba(6, 5, 10, 0));
+}
+
+.wgLogoBig {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 200px;
+}
+
+.wgLogoBig img {
+	height: 100px;
+	/* 2–3x larger */
+	width: auto;
+	opacity: 0.95;
+	filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.55));
+}
+
+.wgLogoSkelBig {
+	height: 100px;
+	width: 160px;
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* FEATURES */
+.wgFeaturesSection {
+	background: rgba(255, 255, 255, 0.02);
+}
+
+.wgFeaturesGrid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 14px;
+}
+
+@media (max-width: 920px) {
+	.wgFeaturesGrid {
+		grid-template-columns: 1fr;
+	}
+}
+
+.wgFeatureCard {
+	border-radius: 18px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	padding: 16px;
+}
+
+.wgFeatureTitle {
+	font-weight: 1100;
+	margin-bottom: 6px;
+}
+
+.wgFeatureBody {
+	color: var(--muted);
+	line-height: 1.45;
+}
+
+/* DEMO SECTION */
+.wgDemoSection {
+	background:
+		radial-gradient(900px 520px at 70% 0%, rgba(109, 40, 217, 0.18), transparent 60%),
+		rgba(255, 255, 255, 0.02);
+}
+
+.wgDemoGrid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 14px;
+}
+
+.wgDemoCard {
+	border-radius: 20px;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	background: rgba(0, 0, 0, 0.28);
+	padding: 16px;
+}
+
+.wgDemoHeader {
+	margin-bottom: 10px;
+}
+
+.wgDemoTitle {
+	font-weight: 1100;
+	font-size: 16px;
+}
+
+.wgDemoSub {
+	margin-top: 4px;
+}
+
+.wgDemoRail {
+	display: flex;
+	gap: 12px;
+	overflow-x: auto;
+	padding-bottom: 6px;
+}
+
+.wgDemoRail::-webkit-scrollbar {
+	height: 8px;
+}
+
+.wgDemoRail::-webkit-scrollbar-thumb {
+	background: rgba(255, 255, 255, 0.12);
+	border-radius: 999px;
+}
+
+.wgDemoTile {
+	width: 120px;
+	flex: 0 0 auto;
+}
+
+.wgDemoTile img,
+.wgDemoPosterSkel {
+	width: 120px;
+	height: 180px;
+	border-radius: 18px;
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	background: rgba(255, 255, 255, 0.06);
+	object-fit: cover;
+	box-shadow: 0 18px 46px rgba(0, 0, 0, 0.55);
+}
+
+.wgDemoTileTitle {
+	margin-top: 8px;
+	font-weight: 900;
+	font-size: 12px;
+	line-height: 1.2;
+	max-height: 2.4em;
+	overflow: hidden;
+}
+
+.wgDemoTileMeta {
+	margin-top: 4px;
+	color: var(--muted);
+	font-size: 11px;
+}
+
+/* footer cta */
+.wgFooterCta {
+	margin-top: 20px;
+	border-radius: 20px;
+	border: 1px solid rgba(109, 40, 217, 0.35);
+	background: rgba(109, 40, 217, 0.10);
+	padding: 18px;
+	display: flex;
+	justify-content: space-between;
+	gap: 14px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.wgFooterTitle {
+	font-weight: 1100;
+	font-size: 16px;
+}
+
+.wgHeaderLogo {
+	height: 48px;
+	width: 180px;
+	display: block;
+}
+
+.wgHeroLogoImg {
+	height: 90px;
+	width: 340px;
+	margin-top: 20px;
+	margin-bottom: 48px;
 }

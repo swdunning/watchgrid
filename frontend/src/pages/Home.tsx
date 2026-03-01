@@ -291,7 +291,7 @@ const savedKeySet = useMemo(() => {
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
             <input
-              className="input"
+              className="inputSearch"
               style={{ maxWidth: 560 }}
               value={q}
               onChange={(e) => setQ(e.target.value)}

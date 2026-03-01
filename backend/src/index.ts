@@ -17,6 +17,7 @@ import listsRoutes from "./routes/lists"
 import browseRoutes from "./routes/browse"
 import titlesEnsureRoutes from "./routes/titlesEnsure"
 import adminRoutes from "./routes/admin"
+import landingRoutes from "./routes/landing"
 
 const app = express()
 
@@ -24,6 +25,7 @@ app.use("/api", adminRoutes)
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
+
 app.use("/api", providerRowsRoutes)
 app.use("/api", accountRoutes)
 app.use("/api", titlesRoutes)
@@ -40,6 +42,7 @@ app.use("/api", searchRoutes)
 app.use("/api", listsRoutes)
 app.use("/api", browseRoutes)
 app.use("/api", titlesEnsureRoutes)
+app.use("/api", landingRoutes)
 
 const port = Number(process.env.PORT ?? 4000)
 app.listen(port, () => console.log(`Backend running on http://localhost:${port}`))

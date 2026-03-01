@@ -402,11 +402,12 @@ function slugKey(s: string) {
 		.replace(/^_+|_+$/g, "")
 }
 
-function genreRowTitleFor(name: string, mode: "all" | "shows" | "movies") {
-	// You can tweak wording later; this keeps titles consistent
-	if (mode === "shows") return `Most popular TV shows - ${name}`
-	if (mode === "movies") return `Most popular movies - ${name}`
-	return `Most popular - ${name}`
+function genreRowTitleFor(provider: ProviderKey, name: string, mode: "all" | "shows" | "movies") {
+	const label = labelFor(provider)
+
+	if (mode === "shows") return `Most Popular TV Shows - ${label}`
+	if (mode === "movies") return `Most Popular Movies - ${label}`
+	return `Most Popular - ${label}`
 }
 
 /**
@@ -606,7 +607,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		rows.push({
 			key: "popular_tv",
 			kind: "popular_tv",
-			title: "Most popular TV shows (USA)",
+			title: `Most Popular TV Shows - ${labelFor(provider)}`,
 			page: 1,
 			// Always allow Load More if items exist; browse decides if more pages exist.
 			canLoadMore: (tv.items || []).length > 0,
@@ -622,7 +623,7 @@ router.get("/provider/:provider/rows", requireAuth, async (req, res) => {
 		rows.push({
 			key: "popular_movies",
 			kind: "popular_movies",
-			title: "Most popular movies (USA)",
+			title: `Most Popular Movies - ${labelFor(provider)}`,
 			page: 1,
 			// Always allow Load More if items exist; browse decides if more pages exist.
 			canLoadMore: (mv.items || []).length > 0,

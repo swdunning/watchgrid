@@ -83,6 +83,7 @@ export default function ProviderRow({
               item={it}
               action={action}		
 			  onPosterClick={onPosterClick ? () => onPosterClick(it) : undefined}
+			  onCardClick={onPosterClick ? () => onPosterClick(it) : undefined}
             />
           );
         })}
