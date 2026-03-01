@@ -267,6 +267,7 @@ a:hover {
 }
 /*Selected Button in Provider Page - TV Shows & Movies, TV Shows, Movies*/
 .btn {
+	margin-top: 8px;
 	border: 1px solid rgba(167, 139, 250, 0.25);
 	background: linear-gradient(135deg, var(--purple), var(--purple2));
 	color: white;
@@ -279,10 +280,58 @@ a:hover {
 
 /*NOT Selected Button in Provider Page - TV Shows & Movies, TV Shows, Movies*/
 .btn.secondary {
+	margin-top: 8px;
 	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid var(--border);
 	color: var(--text);
 	box-shadow: none;
+}
+
+.btn.add.modal {
+	margin-top: 20px;
+	border: 1px solid rgba(167, 139, 250, 0.25);
+	background: linear-gradient(135deg, var(--purple), var(--purple2));
+	color: white;
+	font-weight: 800;
+	border-radius: 12px;
+	padding: 10px 12px;
+	cursor: pointer;
+	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), 0 0 26px rgba(109, 40, 217, 0.12);
+}
+
+.btn.secondary.modal { 
+	margin-top: 20px;
+	font-Weight: 600;
+	font-Size: 12px;
+	line-Height: "14px";
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid var(--border);
+	color: var(--text);
+	box-shadow: none;
+}
+
+.btn.danger.modal {
+	margin-top: 20px;
+	background: rgba(255,
+			255,
+			255,
+			0.06);
+	border: 1px solid rgba(255, 0, 47, 0.548);
+	color: var(--text);
+	box-shadow: none;
+}
+
+.see.more.link { 
+	text-decoration: underline;
+	color: rgb(108, 40, 217);
+	
+	padding-bottom: 10px; 
+	margin-Bottom: 14px;
+			
+}
+
+p.text.home, h1.text.home{
+	text-align: center;
 }
 
 
@@ -309,7 +358,10 @@ a.btn:hover {
 }
 
 .btn.danger {
-	background: rgba(255, 58, 94, 0.175);
+	background: rgba(255,
+		255,
+		255,
+		0.06);
 	border: 1px solid rgba(255, 0, 47, 0.548);
 	color: var(--text);
 	box-shadow: none;

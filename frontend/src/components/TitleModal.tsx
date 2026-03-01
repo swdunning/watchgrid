@@ -177,7 +177,7 @@ if (typeLabel === "Series" && meta?.seasons)
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.65)",
+        background: "rgba(0, 0, 0, 0.86)",
         zIndex: 1000,
         display: "grid",
         placeItems: "center",
@@ -267,13 +267,12 @@ if (typeLabel === "Series" && meta?.seasons)
     </p>
 
     {meta.description.length > 160 ? (
-      <button
-        className="btn"
-        style={{ padding: "8px 10px", borderRadius: 10, marginBottom: 14 }}
+      <a
+        className="see more link"
         onClick={() => setDescExpanded((v) => !v)}
       >
         {descExpanded ? "See less" : "See more"}
-      </button>
+      </a>
     ) : (
       <div style={{ height: 4 }} />
     )}
@@ -291,29 +290,28 @@ if (typeLabel === "Series" && meta?.seasons)
     Resolving…
   </button>
 ) : watchUrl ? (
-  <a className="btn secondary" href={watchUrl} target="_blank" rel="noreferrer noopener">
+  <a className="btn secondary modal" href={watchUrl} target="_blank" rel="noreferrer noopener" >
     Open
   </a>
 ) : (
-  <button className="btn secondary" disabled title="No link found yet">
+  <button className="btn secondary modal" disabled title="No link found yet">
     Open
   </button>
 )}
 
-
           {onAdd ? (
-            <button className="btn" onClick={onAdd}>
+            <button className="btn add modal" onClick={onAdd}>
               + Add
             </button>
           ) : null}
 
           {onRemove ? (
-            <button className="btn danger" onClick={onRemove}>
+            <button className="btn danger modal" onClick={onRemove}>
               – Remove
             </button>
           ) : null}
 
-          <button className="btn secondary" onClick={onClose}>
+          <button className="btn secondary modal" onClick={onClose}>
             Close
           </button>
         </div>

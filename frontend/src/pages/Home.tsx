@@ -264,6 +264,26 @@ const savedKeySet = useMemo(() => {
     }
   };
 
+  // Teaching moment (React):
+// useMemo caches a computed value between renders.
+// Here, we compute a sorted display order for provider rows without mutating state.
+const sortedProviderRows = useMemo(() => {
+  const copy = [...(rows || [])];
+
+  return copy.sort((a, b) => {
+    const aHasSaved = (a.savedItems?.length ?? 0) > 0;
+    const bHasSaved = (b.savedItems?.length ?? 0) > 0;
+
+    // 1) rows with saved items come first
+    if (aHasSaved !== bHasSaved) return aHasSaved ? -1 : 1;
+
+    // 2) within each group, sort by provider label A→Z
+    const aLabel = (a.label || a.provider || "").toLowerCase();
+    const bLabel = (b.label || b.provider || "").toLowerCase();
+    return aLabel.localeCompare(bLabel);
+  });
+}, [rows]);
+
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
     nav("/");
@@ -285,11 +305,11 @@ const savedKeySet = useMemo(() => {
       />
 
       <div className="page">
+		 <h1 className="h1 text home" style={{ marginBottom: 0 }}>All Your WatchGrid Lists In One Place</h1>
+          <p className="p text home" style={{marginTop: 4, marginBottom: 30}}> Your lists by service — and popular picks to help you start.</p>
+		  
         <div className="card">
-          <h1 style={{ marginTop: 0 }}>Your WatchGrid</h1>
-          <p className="muted">Your lists by service — and popular picks to help you start.</p>
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
             <input
               className="inputSearch"
               style={{ maxWidth: 560 }}
@@ -446,7 +466,7 @@ const savedKeySet = useMemo(() => {
 				)}
 
 
-              {rows.map((row) => {
+              {sortedProviderRows.map((row) => {
                 const pKey = String(row.provider).toUpperCase();
                 const hasSaved = (row.savedItems?.length ?? 0) > 0;
 
