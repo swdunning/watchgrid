@@ -157,8 +157,8 @@ body {
 }
 
 .wgRowLogo {
-	width: 60px;
-	height: 60px;
+	width: 48px;
+	height: 48px;
 	border-radius: 10px;
 	object-fit: cover;
 	
@@ -267,7 +267,20 @@ a:hover {
 }
 /*Selected Button in Provider Page - TV Shows & Movies, TV Shows, Movies*/
 .btn {
-	margin-top: 8px;
+	margin-top: 0px;
+	border: 1px solid rgba(167, 139, 250, 0.25);
+	background: linear-gradient(135deg, var(--purple), var(--purple2));
+	color: white;
+	font-weight: 800;
+	border-radius: 12px;
+	padding: 10px 12px;
+	cursor: pointer;
+	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), 0 0 26px rgba(109, 40, 217, 0.12);
+}
+
+.btn.search {
+	margin-top: 2px;
+	height: 42px;
 	border: 1px solid rgba(167, 139, 250, 0.25);
 	background: linear-gradient(135deg, var(--purple), var(--purple2));
 	color: white;
@@ -280,7 +293,7 @@ a:hover {
 
 /*NOT Selected Button in Provider Page - TV Shows & Movies, TV Shows, Movies*/
 .btn.secondary {
-	margin-top: 8px;
+	margin-top: 0px;
 	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid var(--border);
 	color: var(--text);
@@ -387,7 +400,7 @@ a.btn:hover {
 }
 
 .inputSearch {
-	height: 44px;
+	height: 48px;
 	width: 100%;
 	padding: 12px 14px;
 	border-radius: 12px;
@@ -867,12 +880,64 @@ a.btn:hover {
 	letter-spacing: 0.2px;
 }
 
+p.chip.home {
+	text-align: center;
+	font-size: 14px;
+}
+
 .wgLogoSkel {
 	min-width: 120px;
 	height: 44px;
 	border-radius: 999px;
 	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Home provider quick-jump chips */
+.wgProviderChips {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	padding: 10px 12px;
+	border-radius: 16px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wgProviderChip {
+	all: unset;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: auto;
+	min-width: 44px;
+	padding: 12px 12px;
+	border-radius: 14px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.10);
+	transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.wgProviderChip:hover {
+	transform: translateY(-1px);
+	background: rgba(255, 255, 255, 0.06);
+	border-color: rgba(255, 255, 255, 0.14);
+}
+
+.wgProviderChipLogo {
+	height: 60px;
+	width: auto;
+	opacity: 0.95;
+	filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5));
+}
+
+.wgProviderChipText {
+	font-weight: 900;
+	font-size: 12px;
+	color: rgba(255, 255, 255, 0.85);
 }
 
 /* sections */

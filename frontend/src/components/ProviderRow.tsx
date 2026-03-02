@@ -50,7 +50,7 @@ export default function ProviderRow({
 
         {onSeeAll ? (
           <button className="wgPillBtn" onClick={onSeeAll}>
-            See all
+            Browse
           </button>
         ) : null}
       </div>

@@ -102,6 +102,33 @@ export default function Home() {
     if (q.trim() === "") setResults([]);
   }, [q]);
 
+
+
+const selectedProviders = useMemo(() => {
+  // rows is the list of providers user has selected (coming from /api/home)
+  const keys = (rows || []).map((r) => String(r.provider).toUpperCase());
+
+  // turn into objects with logo/label
+  return keys
+    .map((p) => ({
+      provider: p,
+      label: meta[p]?.label ?? p,
+      logoUrl: meta[p]?.logoUrl ?? null,
+    }))
+    .filter((x) => x.provider);
+}, [rows, meta]);
+
+const scrollToProviderRow = (provider: string) => {
+  const id = `provider-${String(provider).toUpperCase()}`;
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  // smooth scroll
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // update URL hash (optional)
+  window.history.replaceState(null, "", `#${id}`);
+};
   // ✅ Used to disable "+ Add" in Search when already saved
 const savedKeySet = useMemo(() => {
   const s = new Set<string>();
@@ -309,7 +336,30 @@ const sortedProviderRows = useMemo(() => {
           <p className="p text home" style={{marginTop: 4, marginBottom: 30}}> Your lists by service — and popular picks to help you start.</p>
 		  
         <div className="card">
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+			 <p className="p chip home" style={{marginTop: 4, marginBottom: 0}}> Click a provider logo to scroll to row</p>
+			{/* Selected providers quick-jump */}
+			{selectedProviders.length > 0 && (
+			<div style={{ display: "flex", justifyContent: "center", marginTop: 12 }}>
+				<div className="wgProviderChips" aria-label="Jump to a provider row">
+				{selectedProviders.map((p) => (
+					<button
+					key={p.provider}
+					type="button"
+					className="wgProviderChip"
+					onClick={() => scrollToProviderRow(p.provider)}
+					title={`Jump to ${p.label}`}
+					>
+					{p.logoUrl ? (
+						<img className="wgProviderChipLogo" src={p.logoUrl} alt={p.label} />
+					) : (
+						<span className="wgProviderChipText">{p.label}</span>
+					)}
+					</button>
+				))}
+				</div>
+			</div>
+			)}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 28, justifyContent: "center" }}>
             <input
               className="inputSearch"
               style={{ maxWidth: 560 }}
@@ -319,7 +369,7 @@ const sortedProviderRows = useMemo(() => {
               placeholder="Search across your services…"
               onKeyDown={(e) => (e.key === "Enter" ? runSearch() : null)}
             />
-            <button className="btn" onClick={runSearch} disabled={loadingSearch}>
+            <button className="btn search" onClick={runSearch} disabled={loadingSearch}>
               {loadingSearch ? "Searching…" : "Search"}
             </button>
           </div>
@@ -472,11 +522,15 @@ const sortedProviderRows = useMemo(() => {
 
                 const items = hasSaved ? row.savedItems : row.popularItems;
                 const title = hasSaved ? `My List – ${row.label}` : `Popular on ${row.label}`;
-                const hint = hasSaved ? "" : "Click to add items to your list";
+                const hint = hasSaved ? "" : "Add a title to save to your list or browse below"
                 const logoUrl = meta[pKey]?.logoUrl ?? null;
 
                 return (
-                  <div key={row.provider} style={{ marginBottom: 16 }}>
+                  <div
+					key={row.provider}
+					id={`provider-${String(row.provider).toUpperCase()}`}
+					style={{ marginBottom: 16, scrollMarginTop: 90 }}
+>
                     {!hasSaved && (
                       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
                         <span className="muted" style={{ fontSize: 13 }}>{hint}</span>
