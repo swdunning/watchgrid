@@ -61,7 +61,7 @@ router.put("/account", requireAuth, async (req, res) => {
 		if (!currentPassword || typeof currentPassword !== "string") {
 			return res.status(400).json({ error: "Current password required" })
 		}
-		const ok = await bcrypt.compare(currentPassword, user.password)
+		const ok = await bcrypt.compare(currentPassword, user.passwordHash)
 		if (!ok) return res.status(401).json({ error: "Invalid current password" })
 
 		if (typeof newPassword !== "string" || newPassword.length < 8) {
@@ -69,7 +69,7 @@ router.put("/account", requireAuth, async (req, res) => {
 		}
 
 		const hashed = await bcrypt.hash(newPassword, 10)
-		await prisma.user.update({ where: { id: userId }, data: { password: hashed } })
+		await prisma.user.update({ where: { id: userId }, data: { passwordHash: hashed } })
 	}
 
 	return res.json({ ok: true })

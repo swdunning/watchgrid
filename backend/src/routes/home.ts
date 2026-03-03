@@ -196,8 +196,8 @@ async function getPopularForProvider(provider: ProviderKey): Promise<{ items: Ro
 		}
 
 		return {
-			items: cachedAll.items as RowItem[],
-			rateLimited: cachedAll.status === "RATE_LIMITED",
+			items: (cachedAll?.items as RowItem[]) ?? [],
+			rateLimited: cachedAll?.status === "RATE_LIMITED",
 		}
 	}
 
