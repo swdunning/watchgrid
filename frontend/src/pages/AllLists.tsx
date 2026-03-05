@@ -415,7 +415,9 @@ export default function AllLists() {
                   type: it.type,
                   poster: it.poster ?? null,
                   watchUrl: it.watchUrl ?? null,
-                  provider: it.provider
+                  provider: it.provider,
+				  genres: it.genres,
+				  genresStatus: it.genresStatus,
                 }}
                 onWatchUrlResolved={(url) => applyWatchUrl(it.provider, it.watchmodeTitleId, url)}
 				onPosterClick={() => setModalItem(it)} // for row item
@@ -463,7 +465,9 @@ export default function AllLists() {
                             type: it.type,
                             poster: it.poster ?? null,
                             watchUrl: it.watchUrl ?? null,
-                            provider: it.provider
+                            provider: it.provider,
+							genres: it.genres,
+							genresStatus: it.genresStatus,
                           }}
                           onWatchUrlResolved={(url) => applyWatchUrl(it.provider, it.watchmodeTitleId, url)}
 						  onPosterClick={() => setModalItem(it)} // for row item

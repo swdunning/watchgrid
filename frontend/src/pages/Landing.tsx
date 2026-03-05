@@ -108,8 +108,8 @@ export default function LandingPage() {
   }, [providers]);
 
   // Collage background posters (URLs). Used in section backgrounds.
-  const collage = demo?.collagePosters ?? [];
-  const collageStyle = useMemo(() => {
+  /*const collage = demo?.collagePosters ?? [];
+   const collageStyle = useMemo(() => {
     // Use a few posters as layered background images.
     // Multiple background images work like: background-image: url(a), url(b), url(c)
     const picks = collage.slice(0, 10).filter(Boolean);
@@ -118,7 +118,7 @@ export default function LandingPage() {
     return {
       backgroundImage: picks.map((u) => `url(${u})`).join(", "),
     } as React.CSSProperties;
-  }, [collage]);
+  }, [collage]); */
 
   // Pull the mock hero “WatchGrid screen” posters from demo rows.
   const heroRows = useMemo(() => {

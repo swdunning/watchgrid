@@ -1,5 +1,5 @@
 // TitleModal.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api/client";
 
@@ -10,6 +10,10 @@ type BasicItem = {
   poster: string | null;
   watchUrl?: string | null;
   provider?: string;
+
+  // ✅ add these (optional so other pages don’t have to provide them)
+  genres?: string[];
+  genresStatus?: "PENDING" | "OK" | "NONE" | "ERROR";
 };
 
 type TitleMeta = {
