@@ -138,7 +138,7 @@ export default function LandingPage() {
             <button className="btn secondary" onClick={() => nav("/login")}>
               Sign in
             </button>
-            <button className="btn" onClick={() => nav("/signup")}>
+            <button className="btn" onClick={() => nav("/register")}>
               Create account
             </button>
           </div>
@@ -305,7 +305,7 @@ export default function LandingPage() {
                 <div className="muted">Create an account, choose your services, and start saving titles.</div>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button className="btn" onClick={() => nav("/signup")}>
+                <button className="btn" onClick={() => nav("/register")}>
                   Create account →
                 </button>
                 <button className="btn secondary" onClick={() => nav("/login")}>
