@@ -6,10 +6,14 @@ import { normalizeProviderKey, type ProviderKey } from "../types"
 
 const router = Router()
 
+const isProd = process.env.NODE_ENV === "production"
+
 const COOKIE_OPTIONS = {
 	httpOnly: true,
-	sameSite: "lax" as const,
-	secure: false, // set true in production with HTTPS
+	sameSite: (isProd ? "none" : "lax") as "none" | "lax",
+	secure: isProd,
+	domain: isProd ? ".watchgrid.co" : undefined,
+	path: "/",
 	maxAge: 7 * 24 * 60 * 60 * 1000,
 }
 
@@ -82,7 +86,13 @@ router.post("/login", async (req, res) => {
 })
 
 router.post("/logout", async (_req, res) => {
-	res.clearCookie("token")
+	res.clearCookie("token", {
+		httpOnly: true,
+		sameSite: (isProd ? "none" : "lax") as "none" | "lax",
+		secure: isProd,
+		domain: isProd ? ".watchgrid.co" : undefined,
+		path: "/",
+	})
 	res.json({ ok: true })
 })
 

@@ -1,5 +1,3 @@
-//index.ts
-
 import "dotenv/config"
 import accountRoutes from "./routes/account"
 import titlesRoutes from "./routes/titles"
@@ -21,20 +19,29 @@ import landingRoutes from "./routes/landing"
 
 const app = express()
 
-app.use("/api", adminRoutes)
-app.use(cors({ origin: true, credentials: true }))
+const allowedOrigins = ["http://localhost:5173", "https://watchgrid.co", "https://www.watchgrid.co"]
+
+app.use(
+	cors({
+		origin(origin, callback) {
+			if (!origin) return callback(null, true)
+			if (allowedOrigins.includes(origin)) return callback(null, true)
+			return callback(new Error("Not allowed by CORS"))
+		},
+		credentials: true,
+	}),
+)
+
 app.use(express.json())
 app.use(cookieParser())
 
+app.use("/api", adminRoutes)
 app.use("/api", providerRowsRoutes)
 app.use("/api", accountRoutes)
 app.use("/api", titlesRoutes)
-
 app.get("/health", (_req, res) => res.json({ ok: true }))
-
 app.use("/api", genresRoutes)
 app.use("/api", metaRoutes)
-
 app.use("/api/auth", authRoutes)
 app.use("/api", homeRoutes)
 app.use("/api", providerRoutes)
@@ -45,4 +52,4 @@ app.use("/api", titlesEnsureRoutes)
 app.use("/api", landingRoutes)
 
 const port = Number(process.env.PORT ?? 4000)
-app.listen(port, () => console.log(`Backend running on http://localhost:${port}`))
+app.listen(port, () => console.log(`Backend running on port ${port}`))
