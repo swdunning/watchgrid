@@ -522,7 +522,7 @@ const sortedProviderRows = useMemo(() => {
 
                 const items = hasSaved ? row.savedItems : row.popularItems;
                 const title = hasSaved ? `My List – ${row.label}` : `Popular on ${row.label}`;
-                const hint = hasSaved ? "" : "Add a title to save to your list or browse below"
+                const hint = hasSaved ? "" : "Click 'Browse' to +Add titles to your list"
                 const logoUrl = meta[pKey]?.logoUrl ?? null;
 
                 return (
@@ -546,33 +546,7 @@ const sortedProviderRows = useMemo(() => {
   onRemove={hasSaved ? (id) => removeFromList(row.provider, id) : undefined}
   variant={hasSaved ? "list" : "suggested"}
   onPosterClick={(it) => setModalItem(it)}
-  itemAction={
-    !hasSaved
-      ? (it) => {
-          // provider for this row (NETFLIX/HULU/etc)
-          const p = String(row.provider).toUpperCase();
-
-          // used to disable the button if already saved
-          const key = `${p}:${it.watchmodeTitleId}`;
-          const alreadyAdded = savedKeySet.has(key);
-
-          return (
-            <button
-              className={`btn ${alreadyAdded ? "secondary" : ""}`}
-              style={{ padding: "8px 10px", borderRadius: 10 }}
-              onClick={(e) => {
-                e.stopPropagation(); // ✅ prevents opening the modal when clicking +Add
-                addToList(p, { ...it, provider: p });
-              }}
-              disabled={alreadyAdded}
-              title={alreadyAdded ? "Already in your list" : "Add to your list"}
-            >
-              {alreadyAdded ? "Added" : "+ Add"}
-            </button>
-          );
-        }
-      : undefined
-  }
+  
 />
                     </div>
                   </div>
