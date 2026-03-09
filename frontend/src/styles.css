@@ -222,6 +222,13 @@ a:hover {
 	padding: 28px 0 70px;
 }
 
+@media (max-width: 640px) {
+	.page {
+		width: min(1200px, calc(100% - 20px));
+		padding: 18px 0 56px;
+	}
+}
+
 .card {
 	border: 1px solid var(--border);
 	background: rgba(255, 255, 255, 0.04);
@@ -1538,8 +1545,15 @@ p.chip.home {
 }
 
 .wgHeroLogoImg {
-	height: 90px;
-	width: 340px;
+	height: auto;
+	width: min(340px, 78vw);
 	margin-top: 20px;
 	margin-bottom: 48px;
+}
+
+@media (max-width: 640px) {
+	.wgHeroLogoImg {
+		width: min(300px, 82vw);
+		margin-bottom: 28px;
+	}
 }
