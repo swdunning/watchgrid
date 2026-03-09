@@ -1,11 +1,15 @@
 /* frontend/src/index.css */
 
-/*
-  App-shell reset for WatchGrid.
-  Teaching note:
-  - html/body/#root are the "outer box" of the whole app.
-  - On mobile, this outer box should fill the screen, not center itself like a demo page.
-*/
+:root {
+	font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+	line-height: 1.5;
+	font-weight: 400;
+
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
 
 html,
 body,
@@ -24,4 +28,12 @@ body {
 
 body {
 	display: block;
+}
+
+a {
+	text-decoration: inherit;
+}
+
+button {
+	font: inherit;
 }

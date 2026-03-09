@@ -1101,29 +1101,11 @@ p.chip.home {
 	}
 }
 
-/* HERO */
-.wgHeroSection {
-	min-height: calc(100vh - 68px);
-	display: grid;
-	place-items: center;
-	padding: 34px 16px 60px;
-}
-
-.wgHeroBackdrop {
-	position: absolute;
-	inset: -60px;
-	background:
-		radial-gradient(700px 340px at 50% 10%, rgba(109, 40, 217, 0.40), transparent 60%),
-		radial-gradient(800px 420px at 20% 90%, rgba(76, 29, 149, 0.35), transparent 65%),
-		radial-gradient(900px 520px at 90% 70%, rgba(255, 255, 255, 0.08), transparent 65%);
-	filter: blur(2px);
-	opacity: 0.95;
-}
-
 .wgHeroCenter {
 	position: relative;
 	width: 100%;
 	max-width: 980px;
+	margin: 0 auto;
 	text-align: center;
 }
 
@@ -1133,44 +1115,38 @@ p.chip.home {
 	margin-bottom: 10px;
 }
 
-.wgLogoText {
-	font-weight: 1100;
-	font-size: 22px;
-	letter-spacing: 0.3px;
-	padding: 10px 14px;
-	border-radius: 14px;
-	background: rgba(255, 255, 255, 0.04);
-	border: 1px solid rgba(255, 255, 255, 0.10);
+.wgHeroLogoImg {
+	display: block;
+	height: auto;
+	width: min(340px, 78vw);
+	max-width: 100%;
+	margin-top: 20px;
+	margin-bottom: 32px;
 }
 
 .wgHeroKicker {
 	display: inline-flex;
 	padding: 7px 12px;
 	border-radius: 10px;
-	border: px solid rgba(255, 255, 255, 0.10);
 	background: rgba(255, 255, 255, 0.04);
 	font-weight: 900;
 	font-size: 16px;
+	max-width: 100%;
 }
 
 .wgHeroTitle {
 	margin: 14px 0 10px;
-	font-size: 48px;
+	font-size: clamp(32px, 6vw, 48px);
 	line-height: 1.05;
-}
-
-@media (max-width: 560px) {
-	.wgHeroTitle {
-		font-size: 36px;
-	}
 }
 
 .wgHeroSub {
 	margin: 0 auto;
 	max-width: 70ch;
 	color: var(--muted);
-	font-size: 15px;
+	font-size: clamp(14px, 2.8vw, 15px);
 	line-height: 1.55;
+	padding: 0 6px;
 }
 
 .wgHeroCtas {
@@ -1181,9 +1157,9 @@ p.chip.home {
 	flex-wrap: wrap;
 }
 
-/* mock screen */
 .wgHeroMock {
 	margin: 26px auto 0;
+	width: 100%;
 	max-width: 980px;
 	border-radius: 22px;
 	overflow: hidden;
@@ -1236,21 +1212,76 @@ p.chip.home {
 	overflow: hidden;
 }
 
-.wgMockPosterSkel {
+.wgMockPosterSkel,
+.wgMockPosterImg {
 	width: 86px;
 	height: 128px;
 	border-radius: 16px;
+	flex: 0 0 auto;
+}
+
+.wgMockPosterSkel {
 	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .wgMockPosterImg {
-	width: 86px;
-	height: 128px;
-	border-radius: 16px;
 	object-fit: cover;
 	border: 1px solid rgba(255, 255, 255, 0.10);
 	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 720px) {
+	.wgHeroSection {
+		min-height: auto;
+		padding: 24px 12px 44px;
+	}
+
+	.wgHeroLogoImg {
+		width: min(300px, 82vw);
+		margin-top: 10px;
+		margin-bottom: 22px;
+	}
+
+	.wgHeroKicker {
+		font-size: 13px;
+		padding: 6px 10px;
+	}
+
+	.wgHeroCtas {
+		gap: 8px;
+	}
+
+	.wgHeroCtas .btn,
+	.wgHeroCtas .btn.secondary {
+		width: 100%;
+		max-width: 320px;
+	}
+
+	.wgMockTopBar {
+		padding: 10px;
+	}
+
+	.wgMockBody {
+		padding: 10px;
+		gap: 10px;
+	}
+
+	.wgMockRail {
+		gap: 8px;
+	}
+
+	.wgMockPosterSkel,
+	.wgMockPosterImg {
+		width: 72px;
+		height: 108px;
+		border-radius: 12px;
+	}
+
+	.wgMockPill {
+		font-size: 11px;
+		padding: 5px 8px;
+	}
 }
 
 /* LOGO COLLAGE SECTION */
@@ -1446,10 +1477,19 @@ p.chip.home {
 		rgba(255, 255, 255, 0.02);
 }
 
+.wgDemoSection .wgSectionInner {
+	max-width: 1200px;
+	margin: 0 auto;
+	padding: 48px 16px;
+}
+
 .wgDemoGrid {
 	display: grid;
 	grid-template-columns: 1fr;
 	gap: 14px;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 }
 
 .wgDemoCard {
@@ -1457,6 +1497,10 @@ p.chip.home {
 	border: 1px solid rgba(255, 255, 255, 0.10);
 	background: rgba(0, 0, 0, 0.28);
 	padding: 16px;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	overflow: hidden;
 }
 
 .wgDemoHeader {
@@ -1475,8 +1519,15 @@ p.chip.home {
 .wgDemoRail {
 	display: flex;
 	gap: 12px;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: contain;
 	padding-bottom: 6px;
+	scrollbar-gutter: stable;
 }
 
 .wgDemoRail::-webkit-scrollbar {
@@ -1495,6 +1546,7 @@ p.chip.home {
 
 .wgDemoTile img,
 .wgDemoPosterSkel {
+	display: block;
 	width: 120px;
 	height: 180px;
 	border-radius: 18px;
@@ -1517,6 +1569,60 @@ p.chip.home {
 	margin-top: 4px;
 	color: var(--muted);
 	font-size: 11px;
+}
+
+/* footer cta */
+.wgFooterCta {
+	margin-top: 20px;
+	border-radius: 20px;
+	border: 1px solid rgba(109, 40, 217, 0.35);
+	background: rgba(109, 40, 217, 0.10);
+	padding: 18px;
+	display: flex;
+	justify-content: space-between;
+	gap: 14px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.wgFooterTitle {
+	font-weight: 1100;
+	font-size: 16px;
+}
+
+@media (max-width: 720px) {
+	.wgDemoSection .wgSectionInner {
+		padding: 36px 14px;
+	}
+
+	.wgDemoCard {
+		padding: 12px;
+		border-radius: 16px;
+	}
+
+	.wgDemoTitle {
+		font-size: 15px;
+	}
+
+	.wgDemoRail {
+		gap: 10px;
+		padding-bottom: 4px;
+	}
+
+	.wgDemoTile {
+		width: 96px;
+	}
+
+	.wgDemoTile img,
+	.wgDemoPosterSkel {
+		width: 96px;
+		height: 144px;
+		border-radius: 14px;
+	}
+
+	.wgDemoTileTitle {
+		font-size: 11px;
+	}
 }
 
 /* footer cta */

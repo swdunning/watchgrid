@@ -6,6 +6,7 @@
   - We want it to behave like a full-width container, not a boxed card in the middle.
 */
 
+
 #root {
 	width: 100%;
 	max-width: 100%;
