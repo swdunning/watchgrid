@@ -30,7 +30,7 @@ export default function Login() {
     <>
       <Header />
       <div className="page">
-        <div className="card" style={{ maxWidth: 520 }}>
+        <div className="card formCard">
           <h1 style={{ marginTop: 0 }}>Log in</h1>
           <div style={{ display:"grid", gap:10, marginTop:14 }}>
             <input className="input" placeholder="Email" value={email} onChange={(e)=>setEmail(e.target.value)} />

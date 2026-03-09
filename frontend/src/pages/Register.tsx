@@ -48,7 +48,7 @@ export default function Register() {
     <>
       <Header />
       <div className="page">
-        <div className="card" style={{ maxWidth: 760 }}>
+        <div className="card formCard">
           <h1 style={{ marginTop: 0 }}>Create your WatchGrid</h1>
           <p className="muted">Select your streaming services — your Home rows will match.</p>
 

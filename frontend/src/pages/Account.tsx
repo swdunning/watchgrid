@@ -98,7 +98,7 @@ export default function Account() {
     <>
       <Header
         right={
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="headerRight">
             <button className="btn secondary" onClick={() => nav("/app")}>
               ← Home
             </button>
@@ -117,7 +117,7 @@ export default function Account() {
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Email & Password</h2>
 
-          <div style={{ display: "grid", gap: 10, maxWidth: 520 }}>
+          <div className="card formCard">
             <div>
               <div className="muted" style={{ marginBottom: 6 }}>Email</div>
               <input className="input" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />

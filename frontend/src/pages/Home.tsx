@@ -320,7 +320,7 @@ const sortedProviderRows = useMemo(() => {
     <>
       <Header
         right={
-          <div style={{ display: "flex", gap: 10 }}>
+         <div className="headerRight">
             <button className="btn secondary" onClick={() => nav("/app/account")}>
               Account
             </button>

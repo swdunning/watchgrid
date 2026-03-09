@@ -217,15 +217,16 @@ a:hover {
 }
 
 .page {
-	width: min(1200px, calc(100% - 32px));
+	width: 100%;
+	max-width: 1200px;
 	margin: 0 auto;
-	padding: 28px 0 70px;
+	padding: 24px 16px;
+	box-sizing: border-box;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 720px) {
 	.page {
-		width: min(1200px, calc(100% - 20px));
-		padding: 18px 0 56px;
+		padding: 16px 14px;
 	}
 }
 
@@ -250,12 +251,21 @@ a:hover {
 }
 
 .headerInner {
-	width: min(1200px, calc(100% - 32px));
+	width: 100%;
+	max-width: 1200px;
 	margin: 0 auto;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 14px 0;
+	padding: 14px 16px;
+	box-sizing: border-box;
+	min-width: 0;
+}
+
+.headerRight {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
 }
 
 .brand {
@@ -432,8 +442,11 @@ a.btn:hover {
 .rail {
 	display: flex;
 	gap: 12px;
-	overflow: auto;
-	padding-bottom: 8px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	max-width: 100%;
+	min-width: 0;
+	-webkit-overflow-scrolling: touch;
 }
 
 .heroArrowBtn { 
@@ -470,6 +483,81 @@ a.btn:hover {
 
 .btn:hover .heroArrow.right {
 	transform: scaleX(1.35) translateX(2px);
+}
+
+
+/* ===== Mobile overflow safety ===== */
+.headerInner,
+.headerRight,
+.card,
+.searchPanelHeader,
+.searchPanelTitle,
+.wgRowHeader,
+.wgRowTitleWrap,
+.wgProviderChips {
+	max-width: 100%;
+	min-width: 0;
+}
+
+.headerRight {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+	.headerInner {
+		width: 100%;
+		padding: 12px 14px;
+		gap: 10px;
+		flex-wrap: wrap;
+		align-items: center;
+	}
+
+	.brand {
+		min-width: 0;
+	}
+
+	.wgHeaderLogo {
+		width: 150px;
+		height: auto;
+		max-width: 100%;
+	}
+
+	.wgProviderChips {
+		gap: 8px;
+		padding: 8px;
+	}
+
+	.wgProviderChip {
+		padding: 8px 10px;
+		border-radius: 12px;
+	}
+
+	.wgProviderChipLogo {
+		height: 42px;
+		max-width: 100%;
+	}
+
+	.wgRowHeader {
+		align-items: flex-start;
+	}
+
+	.wgPillBtn,
+	.btn,
+	.btn.search {
+		max-width: 100%;
+	}
+
+	.searchPanelHeader {
+		flex-wrap: wrap;
+		align-items: flex-start;
+	}
+
+	.searchCloseBtn {
+		align-self: flex-end;
+	}
 }
 
 /* ===== Cinematic Hero Banner (ProviderPage) ===== */
@@ -1073,6 +1161,25 @@ p.chip.home {
 
 .wgFooterBody {
 	margin-top: 4px;
+}
+
+.formCard {
+	width: 100%;
+	max-width: 520px;
+	margin: 0 auto;
+}
+
+@media (max-width: 720px) {
+	.formCard {
+		max-width: 100%;
+	}
+}
+
+.input,
+.inputSearch {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
 }
 
 /* ===== Landing (full-width, trakt-style collage sections) ===== */

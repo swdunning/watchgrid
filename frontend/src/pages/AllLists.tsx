@@ -274,7 +274,7 @@ export default function AllLists() {
     <>
       <Header
         right={
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="headerRight">
             <button className="btn secondary" onClick={() => nav("/app")}>
               ← Back
             </button>
