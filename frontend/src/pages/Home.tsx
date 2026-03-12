@@ -520,36 +520,53 @@ const sortedProviderRows = useMemo(() => {
                 const pKey = String(row.provider).toUpperCase();
                 const hasSaved = (row.savedItems?.length ?? 0) > 0;
 
-                const items = hasSaved ? row.savedItems : row.popularItems;
-                const title = hasSaved ? `My List – ${row.label}` : `Popular on ${row.label}`;
-                const hint = hasSaved ? "" : "Click 'Browse' to +Add titles to your list"
-                const logoUrl = meta[pKey]?.logoUrl ?? null;
+               const items = hasSaved ? row.savedItems : row.popularItems;
+				const title = hasSaved ? `My List – ${row.label}` : `Popular on ${row.label}`;
+				const hint = hasSaved ? "" : "Click 'Browse' to +Add titles to your list";
+				const logoUrl = meta[pKey]?.logoUrl ?? null;
 
+				// v5.1 teaching note:
+				// A row can now be temporarily empty because Home no longer blocks on cold popular-cache fetches.
+				// So we treat "no saved items + no popular items" as a valid warming-up state, not just an empty failure state.
+				const isPopularWarmingUp = !hasSaved && (row.popularItems?.length ?? 0) === 0;
                 return (
                   <div
-					key={row.provider}
-					id={`provider-${String(row.provider).toUpperCase()}`}
-					style={{ marginBottom: 16, scrollMarginTop: 90 }}
+  key={row.provider}
+  id={`provider-${String(row.provider).toUpperCase()}`}
+  style={{ marginBottom: 16, scrollMarginTop: 90 }}
 >
-                    {!hasSaved && (
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
-                        <span className="muted" style={{ fontSize: 13 }}>{hint}</span>
-                      </div>
-                    )}
+  {!hasSaved && (
+    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+      <span className="muted" style={{ fontSize: 13 }}>{hint}</span>
+    </div>
+  )}
 
-                    <div style={{ opacity: hasSaved ? 1 : 0.86 }}>
-                      <ProviderRow
-  title={title}
-  logoUrl={logoUrl}
-  items={items}
-  onSeeAll={() => nav(`/app/provider/${row.provider}`)}
-  onRemove={hasSaved ? (id) => removeFromList(row.provider, id) : undefined}
-  variant={hasSaved ? "list" : "suggested"}
-  onPosterClick={(it) => setModalItem(it)}
-  
-/>
-                    </div>
-                  </div>
+  <div style={{ opacity: hasSaved ? 1 : 0.86 }}>
+    <ProviderRow
+      title={title}
+      logoUrl={logoUrl}
+      items={items}
+      onSeeAll={() => nav(`/app/provider/${row.provider}`)}
+      onRemove={hasSaved ? (id) => removeFromList(row.provider, id) : undefined}
+      variant={hasSaved ? "list" : "suggested"}
+      onPosterClick={(it) => setModalItem(it)}
+    />
+
+    {isPopularWarmingUp && (
+      <div
+        className="card muted"
+        style={{
+          marginTop: 10,
+          padding: 12,
+          borderRadius: 14,
+          background: "rgba(255,255,255,0.03)",
+        }}
+      >
+       Popular titles are still being prepared for {row.label}. Browse now to add titles, or refresh shortly.
+      </div>
+    )}
+  </div>
+</div>
                 );
               })}
             </>
