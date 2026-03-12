@@ -258,6 +258,129 @@ async function getPopularForProvider(provider: ProviderKey): Promise<{ items: Ro
 	}
 }
 
+async function getPopularForProviderFast(provider: ProviderKey): Promise<{ items: RowItem[]; rateLimited: boolean }> {
+	const hasItems = (r: any | null) => (r?.items?.length ?? 0) > 0
+	const isFresh = (r: any | null) => !!r?.isFresh
+
+	const refreshAll = async () => {
+		if (DBG) console.log(`[POPULAR] FAST REFRESH(all) provider=${provider} starting...`)
+
+		const popularRes = await watchmodeListTitlesResult({
+			provider,
+			sortBy: "popularity_desc",
+			limit: POP_LIMIT,
+			page: 1,
+		})
+
+		const items = await buildPostered(provider, popularRes.titles)
+
+		// Do not wipe cache with empty data on failure
+		if (!popularRes.ok && items.length === 0) {
+			if (DBG) {
+				console.log(`[POPULAR] FAST REFRESH(all) provider=${provider} failed ok=${popularRes.ok} rateLimited=${popularRes.rateLimited} -> keep existing cache`)
+			}
+			return
+		}
+
+		await setGlobalRow({
+			provider,
+			kind: "popular",
+			mode: "all",
+			items,
+			ttlSeconds: POPULAR_TTL_SECONDS,
+			status: "OK",
+		})
+
+		const tvItems = items.filter((it) => String(it.type).toLowerCase().includes("tv"))
+		const mvItems = items.filter((it) => String(it.type).toLowerCase().includes("movie"))
+
+		if (tvItems.length) {
+			await setGlobalRow({
+				provider,
+				kind: "popular",
+				mode: "tv",
+				items: tvItems.slice(0, POP_LIMIT),
+				ttlSeconds: POPULAR_TTL_SECONDS,
+				status: "OK",
+			})
+		}
+
+		if (mvItems.length) {
+			await setGlobalRow({
+				provider,
+				kind: "popular",
+				mode: "movie",
+				items: mvItems.slice(0, POP_LIMIT),
+				ttlSeconds: POPULAR_TTL_SECONDS,
+				status: "OK",
+			})
+		}
+
+		if (DBG) console.log(`[POPULAR] FAST REFRESH(all) provider=${provider} done items=${items.length}`)
+	}
+
+	const cachedAll = await getGlobalRow(provider, "popular", "all")
+
+	// 1) fresh or stale all-cache
+	if (hasItems(cachedAll)) {
+		if (!isFresh(cachedAll)) {
+			fireAndForgetRefresh(`popular:${provider}:all`, refreshAll)
+		}
+
+		return {
+			items: (cachedAll?.items as RowItem[]) ?? [],
+			rateLimited: cachedAll?.status === "RATE_LIMITED",
+		}
+	}
+
+	// 2) fallback to tv/movie split caches
+	const cachedTv = await getGlobalRow(provider, "popular", "tv")
+	const cachedMv = await getGlobalRow(provider, "popular", "movie")
+
+	const tvItems = hasItems(cachedTv) ? (cachedTv!.items as RowItem[]) : []
+	const mvItems = hasItems(cachedMv) ? (cachedMv!.items as RowItem[]) : []
+
+	if (tvItems.length || mvItems.length) {
+		const merged: RowItem[] = []
+		let i = 0
+		while (merged.length < POP_LIMIT && (i < tvItems.length || i < mvItems.length)) {
+			if (i < tvItems.length) merged.push(tvItems[i])
+			if (merged.length >= POP_LIMIT) break
+			if (i < mvItems.length) merged.push(mvItems[i])
+			i++
+		}
+
+		// Only backfill all-cache if missing/stale
+		if (!cachedAll || !isFresh(cachedAll)) {
+			await setGlobalRow({
+				provider,
+				kind: "popular",
+				mode: "all",
+				items: merged,
+				ttlSeconds: POPULAR_TTL_SECONDS,
+				status: "OK",
+			})
+		}
+
+		if (!isFresh(cachedTv) || !isFresh(cachedMv)) {
+			fireAndForgetRefresh(`popular:${provider}:all`, refreshAll)
+		}
+
+		const rateLimited = cachedTv?.status === "RATE_LIMITED" || cachedMv?.status === "RATE_LIMITED"
+		return { items: merged, rateLimited: !!rateLimited }
+	}
+
+	// 3) true cold start:
+	// do NOT block Home waiting for Watchmode.
+	if (DBG) console.log(`[POPULAR] FAST COLD START provider=${provider} -> async refresh only`)
+	fireAndForgetRefresh(`popular:${provider}:all`, refreshAll)
+
+	return {
+		items: [],
+		rateLimited: watchmodeWasRateLimitedRecently(),
+	}
+}
+
 router.get("/home", requireAuth, async (req, res) => {
 	const userId = (req as any).userId as string
 
@@ -301,7 +424,7 @@ router.get("/home", requireAuth, async (req, res) => {
 
 	// preload popular for each provider (cached; concurrency limited)
 	await asyncPool(2, providers, async (p) => {
-		const pop = await getPopularForProvider(p)
+		const pop = await getPopularForProviderFast(p)
 		rows[p].popularItems = pop.items
 		rows[p].popularRateLimited = pop.rateLimited
 	})
