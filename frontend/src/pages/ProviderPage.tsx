@@ -72,7 +72,7 @@ export default function ProviderPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [rateLimited, setRateLimited] = useState(false);
+  
   const [modalItem, setModalItem] = useState<RowItem | null>(null);
 
   // Mode / genre filters
@@ -143,7 +143,6 @@ export default function ProviderPage() {
 
       const data = await api<ProviderRowPayload>(url);
       setPayload(data);
-      setRateLimited(!!data.rateLimited);
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load provider page");
     } finally {
@@ -172,7 +171,7 @@ export default function ProviderPage() {
 
       setGenresPage(data.page ?? page);
       setCanLoadMoreGenres(!!data.canLoadMore);
-      setRateLimited((prev) => prev || !!data.rateLimited);
+      
     } catch (e: any) {
       setErr(e?.message ?? "Failed to load genre rows");
     } finally {
@@ -657,13 +656,7 @@ export default function ProviderPage() {
             </button>
           </div>
 
-          {rateLimited && (
-            <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
-              <div style={{ color: "#ff5b7a", fontWeight: 600 }}>
-                We’re temporarily rate-limited by Watchmode. Try again in a few minutes.
-              </div>
-            </div>
-          )}
+          
 
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
 

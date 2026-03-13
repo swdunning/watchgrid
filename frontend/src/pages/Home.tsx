@@ -35,8 +35,7 @@ export default function Home() {
 
   const [rows, setRows] = useState<HomeRow[]>([]);
   const [masterSavedItems, setMasterSavedItems] = useState<RowItem[]>([]);
-  const [rateLimited, setRateLimited] = useState(false);
-  const [popularRateLimitedProviders, setPopularRateLimitedProviders] = useState<string[]>([]);
+ const [homeAutoRefreshCount, setHomeAutoRefreshCount] = useState(0);
 
   const [meta, setMeta] = useState<Record<string, ProviderMeta>>({});
   const [err, setErr] = useState<string | null>(null);
@@ -52,28 +51,23 @@ export default function Home() {
   const [loadingSearch, setLoadingSearch] = useState(false);
 
   const loadHome = async () => {
-    setLoadingHome(true);
-    setErr(null);
-    try {
-	const data = await api<{
-		rows: (HomeRow & { popularRateLimited?: boolean })[];
-		masterSavedItems?: RowItem[];
-		rateLimited?: boolean;
-		popularRateLimitedProviders?: string[];
-	}>("/api/home");
+  setLoadingHome(true);
+  setErr(null);
 
+  try {
+    const data = await api<{
+      rows: HomeRow[];
+      masterSavedItems?: RowItem[];
+    }>("/api/home");
 
     setRows(data.rows || []);
-	setMasterSavedItems(data.masterSavedItems || []);
-	setRateLimited(!!data.rateLimited);
-	setPopularRateLimitedProviders((data.popularRateLimitedProviders || []).map((p) => String(p).toUpperCase()));
-
-    } catch (e: any) {
-      setErr(e?.message ?? "Failed to load home");
-    } finally {
-      setLoadingHome(false);
-    }
-  };
+    setMasterSavedItems(data.masterSavedItems || []);
+  } catch (e: any) {
+    setErr(e?.message ?? "Failed to load home");
+  } finally {
+    setLoadingHome(false);
+  }
+};
 
   const loadProviderMeta = async () => {
     try {
@@ -311,6 +305,32 @@ const sortedProviderRows = useMemo(() => {
   });
 }, [rows]);
 
+const hasEmptyPopularRows = useMemo(() => {
+  return (rows || []).some((row) => {
+    const hasSaved = (row.savedItems?.length ?? 0) > 0;
+    const hasPopular = (row.popularItems?.length ?? 0) > 0;
+
+    return !hasSaved && !hasPopular;
+  });
+}, [rows]);
+
+useEffect(() => {
+  if (loadingHome) return;
+  if (!hasEmptyPopularRows) return;
+  if (homeAutoRefreshCount >= 2) return;
+
+  const timer = window.setTimeout(async () => {
+    try {
+      await loadHome();
+    } finally {
+      setHomeAutoRefreshCount((n) => n + 1);
+    }
+  }, 4000);
+
+  return () => window.clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [loadingHome, hasEmptyPopularRows, homeAutoRefreshCount]);
+
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
     nav("/");
@@ -373,21 +393,6 @@ const sortedProviderRows = useMemo(() => {
               {loadingSearch ? "Searching…" : "Search"}
             </button>
           </div>
-
-          {(rateLimited || popularRateLimitedProviders.length > 0) && (
-  <div className="card" style={{ marginTop: 12, border: "1px solid rgba(255,91,122,0.35)" }}>
-    <div style={{ color: "#ff5b7a", fontWeight: 600 }}>We’re temporarily rate-limited by Watchmode.</div>
-    <div className="muted" style={{ marginTop: 4 }}>
-      Some “Popular” rows may appear blank for ~30 seconds. Refresh after a moment.
-    </div>
-
-    {popularRateLimitedProviders.length > 0 ? (
-      <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
-        Affected: {popularRateLimitedProviders.join(", ")}
-      </div>
-    ) : null}
-  </div>
-)}
 
 
           {err && <div style={{ color: "#ff5b7a", marginTop: 10 }}>{err}</div>}
