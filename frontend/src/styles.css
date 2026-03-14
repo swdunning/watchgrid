@@ -1,21 +1,21 @@
 :root {
 	--bg: #06050a;
 	--panel: rgba(255, 255, 255, 0.06);
-	--border: rgba(255, 255, 255, 0.10);
+	--border: rgba(255, 255, 255, 0.1);
 	--text: rgba(255, 255, 255, 0.92);
 	--muted: rgba(255, 255, 255, 0.62);
 
 	--purple: #6d28d9;
 	--purple2: #4c1d95;
-	--glow: rgba(109, 40, 217, 0.30);
+	--glow: rgba(109, 40, 217, 0.3);
 
 	--danger: #ff5b7a;
-		--danger-border: rgba(255, 91, 122, 0.38);
-		--danger-bg: rgba(255, 91, 122, 0.14);
+	--danger-border: rgba(255, 91, 122, 0.38);
+	--danger-bg: rgba(255, 91, 122, 0.14);
 }
 
 * {
-	box-sizing: border-box
+	box-sizing: border-box;
 }
 /* Prevent whole-page horizontal scrolling */
 html,
@@ -34,64 +34,74 @@ body {
 
 /* ---------------- Skeleton / shimmer ---------------- */
 @keyframes wgShimmer {
-  0% { transform: translateX(-60%); }
-  100% { transform: translateX(160%); }
+	0% {
+		transform: translateX(-60%);
+	}
+	100% {
+		transform: translateX(160%);
+	}
 }
 
 .skel {
-  position: relative;
-  overflow: hidden;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
+	position: relative;
+	overflow: hidden;
+	border-radius: 12px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .skel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-60%);
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255,255,255,0.10),
-    transparent
-  );
-  animation: wgShimmer 1.1s linear infinite;
+	content: "";
+	position: absolute;
+	inset: 0;
+	transform: translateX(-60%);
+	background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+	animation: wgShimmer 1.1s linear infinite;
 }
 
-.skelText { height: 12px; border-radius: 8px; }
-.skelText.sm { height: 10px; opacity: 0.85; }
-.skelBtn { height: 34px; border-radius: 10px; }
+.skelText {
+	height: 12px;
+	border-radius: 8px;
+}
+.skelText.sm {
+	height: 10px;
+	opacity: 0.85;
+}
+.skelBtn {
+	height: 34px;
+	border-radius: 10px;
+}
 .skelPoster {
-  width: 160px;
-  height: 240px; /* matches your posterCard sizing */
-  border-radius: 16px;
+	width: 160px;
+	height: 240px; /* matches your posterCard sizing */
+	border-radius: 16px;
 }
 
 /* ---------------- Subtle button motion ---------------- */
 .btn,
 .wgPillBtn {
-  transition: transform 120ms ease, filter 140ms ease, border-color 140ms ease;
-  will-change: transform;
+	transition:
+		transform 120ms ease,
+		filter 140ms ease,
+		border-color 140ms ease;
+	will-change: transform;
 }
 
 .btn:hover,
 .wgPillBtn:hover {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
+	filter: brightness(1.05);
+	transform: translateY(-1px);
 }
 
 .btn:active,
 .wgPillBtn:active {
-  transform: translateY(0px) scale(0.98);
+	transform: translateY(0px) scale(0.98);
 }
 
 .btn:disabled,
 .wgPillBtn:disabled {
-  transform: none;
+	transform: none;
 }
-
 
 /* If you have a main wrapper (common in your app), clamp it too */
 #root {
@@ -109,16 +119,20 @@ body {
 
 html,
 body {
-	height: 100%
+	height: 100%;
 }
 
 body {
 	margin: 0;
-	font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-	background:
-		radial-gradient(900px 520px at 18% -10%, rgba(109, 40, 217, 0.35), transparent 60%),
-		radial-gradient(800px 520px at 85% 0%, rgba(76, 29, 149, 0.25), transparent 60%),
-		var(--bg);
+	font-family:
+		ui-sans-serif,
+		system-ui,
+		-apple-system,
+		Segoe UI,
+		Roboto,
+		Arial,
+		sans-serif;
+	background: radial-gradient(900px 520px at 18% -10%, rgba(109, 40, 217, 0.35), transparent 60%), radial-gradient(800px 520px at 85% 0%, rgba(76, 29, 149, 0.25), transparent 60%), var(--bg);
 	color: var(--text);
 }
 
@@ -161,16 +175,16 @@ body {
 	height: 48px;
 	border-radius: 10px;
 	object-fit: cover;
-	
+
 	border: 1px solid rgba(255, 255, 255, 0.341);
 	background: rgba(255, 255, 255, 0.04);
 	padding: 3px;
 }
 
 @media (hover: hover) {
-  .wgRowLogo:hover {
-    box-shadow: 0 0 14px var(--glow);
-  }
+	.wgRowLogo:hover {
+		box-shadow: 0 0 14px var(--glow);
+	}
 }
 
 .wgRowTitle {
@@ -180,9 +194,40 @@ body {
 	text-overflow: ellipsis;
 }
 
+.wgEmptyRowState {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 132px;
+	padding: 16px;
+	border-radius: 14px;
+	border: 1px dashed rgba(255, 255, 255, 0.12);
+	background: rgba(255, 255, 255, 0.025);
+	text-align: center;
+}
+
+.wgEmptyRowStateText {
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1.45;
+	max-width: 520px;
+}
+
+@media (max-width: 720px) {
+	.wgEmptyRowState {
+		min-height: 112px;
+		padding: 14px;
+		border-radius: 12px;
+	}
+
+	.wgEmptyRowStateText {
+		font-size: 12px;
+	}
+}
+
 /* Shared WatchGrid pill button (See All, Load More, etc.) */
 .wgPillBtn {
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	background: var(--wg-purple);
 	color: white;
 	padding: 8px 12px;
@@ -209,11 +254,11 @@ body {
 
 a {
 	color: inherit;
-	text-decoration: none
+	text-decoration: none;
 }
 
 a:hover {
-	text-decoration: underline
+	text-decoration: underline;
 }
 
 .page {
@@ -238,7 +283,7 @@ a:hover {
 }
 
 .muted {
-	color: var(--muted)
+	color: var(--muted);
 }
 
 .header {
@@ -272,7 +317,7 @@ a:hover {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	font-weight: 900
+	font-weight: 900;
 }
 
 .mark {
@@ -292,7 +337,9 @@ a:hover {
 	border-radius: 12px;
 	padding: 10px 12px;
 	cursor: pointer;
-	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), 0 0 26px rgba(109, 40, 217, 0.12);
+	box-shadow:
+		0 10px 26px rgba(0, 0, 0, 0.35),
+		0 0 26px rgba(109, 40, 217, 0.12);
 }
 
 .btn.search {
@@ -305,7 +352,9 @@ a:hover {
 	border-radius: 12px;
 	padding: 10px 12px;
 	cursor: pointer;
-	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), 0 0 26px rgba(109, 40, 217, 0.12);
+	box-shadow:
+		0 10px 26px rgba(0, 0, 0, 0.35),
+		0 0 26px rgba(109, 40, 217, 0.12);
 }
 
 /*NOT Selected Button in Provider Page - TV Shows & Movies, TV Shows, Movies*/
@@ -326,14 +375,16 @@ a:hover {
 	border-radius: 12px;
 	padding: 10px 12px;
 	cursor: pointer;
-	box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35), 0 0 26px rgba(109, 40, 217, 0.12);
+	box-shadow:
+		0 10px 26px rgba(0, 0, 0, 0.35),
+		0 0 26px rgba(109, 40, 217, 0.12);
 }
 
-.btn.secondary.modal { 
+.btn.secondary.modal {
 	margin-top: 20px;
-	font-Weight: 600;
-	font-Size: 12px;
-	line-Height: "14px";
+	font-weight: 600;
+	font-size: 12px;
+	line-height: "14px";
 	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid var(--border);
 	color: var(--text);
@@ -342,28 +393,24 @@ a:hover {
 
 .btn.danger.modal {
 	margin-top: 20px;
-	background: rgba(255,
-			255,
-			255,
-			0.06);
+	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid rgba(255, 0, 47, 0.548);
 	color: var(--text);
 	box-shadow: none;
 }
 
-.see.more.link { 
+.see.more.link {
 	text-decoration: underline;
 	color: rgb(108, 40, 217);
-	
-	padding-bottom: 10px; 
-	margin-Bottom: 14px;
-			
+
+	padding-bottom: 10px;
+	margin-bottom: 14px;
 }
 
-p.text.home, h1.text.home{
+p.text.home,
+h1.text.home {
 	text-align: center;
 }
-
 
 /* Make <a class="btn ...> look identical to <button class="btn ...> */
 a.btn {
@@ -383,15 +430,12 @@ a.btn:hover {
 }
 
 .btn:disabled {
-	opacity: .7;
-	cursor: not-allowed
+	opacity: 0.7;
+	cursor: not-allowed;
 }
 
 .btn.danger {
-	background: rgba(255,
-		255,
-		255,
-		0.06);
+	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid rgba(255, 0, 47, 0.548);
 	color: var(--text);
 	box-shadow: none;
@@ -436,7 +480,7 @@ a.btn:hover {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin: 18px 0 10px
+	margin: 18px 0 10px;
 }
 
 .rail {
@@ -449,7 +493,7 @@ a.btn:hover {
 	-webkit-overflow-scrolling: touch;
 }
 
-.heroArrowBtn { 
+.heroArrowBtn {
 	background: rgba(255, 255, 255, 0);
 	border: 0px solid var(--border);
 	color: var(--text);
@@ -484,7 +528,6 @@ a.btn:hover {
 .btn:hover .heroArrow.right {
 	transform: scaleX(1.35) translateX(2px);
 }
-
 
 /* ===== Mobile overflow safety ===== */
 .headerInner,
@@ -563,7 +606,7 @@ a.btn:hover {
 /* ===== Cinematic Hero Banner (ProviderPage) ===== */
 .heroBanner {
 	position: relative;
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	background: rgba(255, 255, 255, 0.03);
 	border-radius: 16px;
 	overflow: hidden;
@@ -595,8 +638,8 @@ a.btn:hover {
 	pointer-events: none;
 	opacity: 0.08;
 	background-image:
-		repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0px, rgba(255, 255, 255, 0.00) 2px, rgba(255, 255, 255, 0.00) 4px),
-		repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0px, rgba(255, 255, 255, 0.00) 3px, rgba(255, 255, 255, 0.00) 6px);
+		repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0px, rgba(255, 255, 255, 0) 2px, rgba(255, 255, 255, 0) 4px),
+		repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0px, rgba(255, 255, 255, 0) 3px, rgba(255, 255, 255, 0) 6px);
 	mix-blend-mode: overlay;
 }
 
@@ -617,18 +660,21 @@ a.btn:hover {
 	width: 160px;
 	border-radius: 16px;
 	overflow: hidden;
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	background: rgba(255, 255, 255, 0.04);
-	transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+	transition:
+		transform 160ms ease,
+		box-shadow 160ms ease,
+		border-color 160ms ease;
 }
 
 .posterCard:hover {
 	transform: translateY(-4px);
 	border-color: rgba(167, 139, 250, 0.35);
-	box-shadow: 
-	0 16px 42px rgba(0, 0, 0, 0.45), 
-	0 0 30px rgba(109, 40, 217, 0.16),
-	0 0 24px var(--glow),
+	box-shadow:
+		0 16px 42px rgba(0, 0, 0, 0.45),
+		0 0 30px rgba(109, 40, 217, 0.16),
+		0 0 24px var(--glow);
 }
 
 /* Subtle press effect */
@@ -641,7 +687,7 @@ a.btn:hover {
 	aspect-ratio: 2/3;
 	object-fit: cover;
 	background: rgba(255, 255, 255, 0.06);
-	transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+	transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @media (hover: hover) {
@@ -651,7 +697,7 @@ a.btn:hover {
 }
 
 .posterBody {
-	padding: 10px
+	padding: 10px;
 }
 
 .posterTitle {
@@ -667,7 +713,7 @@ a.btn:hover {
 .badge {
 	margin-top: 6px;
 	font-size: 12px;
-	color: var(--muted)
+	color: var(--muted);
 }
 
 /* --- Netflix-style animated search panel --- */
@@ -721,7 +767,6 @@ a.btn:hover {
 	border-color: rgba(167, 139, 250, 0.35);
 }
 
-
 /* --- Provider rails safety: never allow row to exceed viewport --- */
 .wgRow {
 	max-width: 100%;
@@ -769,8 +814,7 @@ a.btn:hover {
 	position: absolute;
 	inset: -40px;
 	background:
-		radial-gradient(600px 300px at 20% 10%, rgba(109, 40, 217, 0.35), transparent 60%),
-		radial-gradient(500px 260px at 80% 30%, rgba(255, 255, 255, 0.10), transparent 55%),
+		radial-gradient(600px 300px at 20% 10%, rgba(109, 40, 217, 0.35), transparent 60%), radial-gradient(500px 260px at 80% 30%, rgba(255, 255, 255, 0.1), transparent 55%),
 		radial-gradient(700px 380px at 60% 100%, rgba(76, 29, 149, 0.35), transparent 65%);
 	filter: blur(2px);
 	opacity: 0.95;
@@ -895,7 +939,7 @@ a.btn:hover {
 	width: 76px;
 	height: 114px;
 	border-radius: 14px;
-	background: linear-gradient(140deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02));
+	background: linear-gradient(140deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
 	border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -957,7 +1001,7 @@ a.btn:hover {
 	height: 44px;
 	padding: 0 14px;
 	border-radius: 999px;
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	background: rgba(0, 0, 0, 0.22);
 }
 
@@ -1012,8 +1056,11 @@ p.chip.home {
 	padding: 12px 12px;
 	border-radius: 14px;
 	background: rgba(255, 255, 255, 0.04);
-	border: 1px solid rgba(255, 255, 255, 0.10);
-	transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	transition:
+		transform 120ms ease,
+		background 120ms ease,
+		border-color 120ms ease;
 }
 
 .wgProviderChip:hover {
@@ -1064,7 +1111,7 @@ p.chip.home {
 
 .wgInfoCard {
 	border-radius: 16px;
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	background: rgba(255, 255, 255, 0.03);
 	padding: 14px;
 }
@@ -1104,7 +1151,7 @@ p.chip.home {
 	height: 138px;
 	border-radius: 16px;
 	background: linear-gradient(135deg, rgba(109, 40, 217, 0.18), rgba(255, 255, 255, 0.04));
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	flex: 0 0 auto;
 }
 
@@ -1150,7 +1197,7 @@ p.chip.home {
 
 	border-radius: 18px;
 	border: 1px solid rgba(109, 40, 217, 0.35);
-	background: rgba(109, 40, 217, 0.10);
+	background: rgba(109, 40, 217, 0.1);
 	padding: 18px;
 }
 
@@ -1334,7 +1381,7 @@ p.chip.home {
 
 .wgMockPosterImg {
 	object-fit: cover;
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 
@@ -1410,9 +1457,7 @@ p.chip.home {
 .wgCollageOverlay {
 	position: absolute;
 	inset: 0;
-	background:
-		radial-gradient(700px 320px at 50% 20%, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.60) 70%),
-		linear-gradient(180deg, rgba(6, 5, 10, 0.40), rgba(6, 5, 10, 0.12));
+	background: radial-gradient(700px 320px at 50% 20%, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.6) 70%), linear-gradient(180deg, rgba(6, 5, 10, 0.4), rgba(6, 5, 10, 0.12));
 }
 
 /* Replace the old wgCollageBg approach */
@@ -1430,8 +1475,7 @@ p.chip.home {
 	filter: saturate(1.05) contrast(1.05);
 
 	/* “Bowed / curved wall” illusion */
-	transform:
-		perspective(1400px) rotateX(18deg) rotateZ(-7deg) translateY(-30px) scale(1.12);
+	transform: perspective(1400px) rotateX(18deg) rotateZ(-7deg) translateY(-30px) scale(1.12);
 
 	transform-origin: 50% 20%;
 
@@ -1563,7 +1607,7 @@ p.chip.home {
 .wgFeatureCard {
 	border-radius: 18px;
 	background: rgba(255, 255, 255, 0.04);
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	padding: 16px;
 }
 
@@ -1579,9 +1623,7 @@ p.chip.home {
 
 /* DEMO SECTION */
 .wgDemoSection {
-	background:
-		radial-gradient(900px 520px at 70% 0%, rgba(109, 40, 217, 0.18), transparent 60%),
-		rgba(255, 255, 255, 0.02);
+	background: radial-gradient(900px 520px at 70% 0%, rgba(109, 40, 217, 0.18), transparent 60%), rgba(255, 255, 255, 0.02);
 }
 
 .wgDemoSection .wgSectionInner {
@@ -1601,7 +1643,7 @@ p.chip.home {
 
 .wgDemoCard {
 	border-radius: 20px;
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	background: rgba(0, 0, 0, 0.28);
 	padding: 16px;
 	width: 100%;
@@ -1657,7 +1699,7 @@ p.chip.home {
 	width: 120px;
 	height: 180px;
 	border-radius: 18px;
-	border: 1px solid rgba(255, 255, 255, 0.10);
+	border: 1px solid rgba(255, 255, 255, 0.1);
 	background: rgba(255, 255, 255, 0.06);
 	object-fit: cover;
 	box-shadow: 0 18px 46px rgba(0, 0, 0, 0.55);
@@ -1683,7 +1725,7 @@ p.chip.home {
 	margin-top: 20px;
 	border-radius: 20px;
 	border: 1px solid rgba(109, 40, 217, 0.35);
-	background: rgba(109, 40, 217, 0.10);
+	background: rgba(109, 40, 217, 0.1);
 	padding: 18px;
 	display: flex;
 	justify-content: space-between;
@@ -1737,7 +1779,7 @@ p.chip.home {
 	margin-top: 20px;
 	border-radius: 20px;
 	border: 1px solid rgba(109, 40, 217, 0.35);
-	background: rgba(109, 40, 217, 0.10);
+	background: rgba(109, 40, 217, 0.1);
 	padding: 18px;
 	display: flex;
 	justify-content: space-between;
