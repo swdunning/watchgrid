@@ -97,6 +97,11 @@ export default function ProviderPage() {
 	const [rowRetryCounts, setRowRetryCounts] = useState<Record<string, number>>({});
 	const [refreshingRows, setRefreshingRows] = useState<Record<string, boolean>>({});
 
+	const providerDebugEmpty = useMemo(() => {
+		const params = new URLSearchParams(window.location.search);
+		return (params.get("wgDebugEmpty") || "").trim().toLowerCase();
+	}, []);
+
 	const railRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
 	const selectedGenreNum = useMemo(() => (genreId === "all" ? null : Number(genreId)), [genreId]);
@@ -199,10 +204,18 @@ export default function ProviderPage() {
 		await loadCuratedGenresPage(next);
 	};
 
+	const providerDebugSlowRefresh = useMemo(() => {
+		const params = new URLSearchParams(window.location.search);
+		return params.get("wgDebugSlowRefresh") === "1";
+	}, []);
+
 	const refreshSingleRow = async (row: Row) => {
 		const rowKey = row.key;
 		setRefreshingRows((prev) => ({ ...prev, [rowKey]: true }));
 
+		if (providerDebugSlowRefresh) {
+			await new Promise((resolve) => setTimeout(resolve, 1200));
+		}
 		try {
 			const url =
 				`/api/provider/${encodeURIComponent(provider)}/row` +
@@ -515,9 +528,13 @@ export default function ProviderPage() {
 			const isMyList = row.kind === "my_list";
 			const retryCount = rowRetryCounts[row.key] ?? 0;
 			const refreshing = !!refreshingRows[row.key];
-			const hasItems = (row.items?.length ?? 0) > 0;
 
-			return !isMyList && !hasItems && !refreshing && retryCount < ROW_RETRY_LIMIT;
+			const hasItems = (row.items?.length ?? 0) > 0;
+			const debugForced = shouldForceProviderEmptyRow(row);
+
+			const needsRetry = !hasItems || debugForced;
+
+			return !isMyList && needsRetry && !refreshing && retryCount < ROW_RETRY_LIMIT;
 		});
 
 		if (!candidates.length) return;
@@ -528,8 +545,30 @@ export default function ProviderPage() {
 			}, ROW_RETRY_DELAY_MS)
 		);
 
-		return () => timers.forEach((t) => window.clearTimeout(t));
+		return () => timers.forEach(clearTimeout);
 	}, [renderedRows, loading, rowRetryCounts, refreshingRows]);
+
+	const shouldForceProviderEmptyRow = (row: Row) => {
+		if (!providerDebugEmpty) return false;
+
+		if (providerDebugEmpty === "1" || providerDebugEmpty === "all") {
+			return row.kind !== "my_list";
+		}
+
+		if (providerDebugEmpty === "genre") {
+			return row.kind === "genre" || row.kind === "genre_tv" || row.kind === "genre_movies";
+		}
+
+		if (providerDebugEmpty === "popular") {
+			return row.kind === "popular_tv" || row.kind === "popular_movies";
+		}
+
+		if (providerDebugEmpty === "new") {
+			return row.kind === "new";
+		}
+
+		return row.key === providerDebugEmpty || row.kind === providerDebugEmpty;
+	};
 
 	return (
 		<>
@@ -806,12 +845,14 @@ export default function ProviderPage() {
 										) : null}
 									</div>
 
-									{(row.items || []).length === 0 ? (
+									{(row.items || []).length === 0 || shouldForceProviderEmptyRow(row) ? (
 										<div className="wgEmptyRowState">
 											<div className="wgEmptyRowStateText">
 												{isMyList
 													? `You haven't added anything to your ${label} list yet.`
-													: `${row.title} is loading or temporarily empty. Try again in a moment.`}
+													: refreshingRows[row.key]
+														? `Refreshing ${row.title.toLowerCase()}…`
+														: `${row.title} is loading or temporarily empty. The row will auto reload in a moment.`}
 											</div>
 										</div>
 									) : (

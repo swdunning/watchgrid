@@ -175,7 +175,7 @@ export default function LandingPage() {
             </p>
 
             <div className="wgHeroCtas">
-              <button className="btn" onClick={() => nav("/signup")}>
+						  <button className="btn" onClick={() => nav("/register")}>
                 Get started free →
               </button>
               <button className="btn secondary" onClick={() => nav("/login")}>

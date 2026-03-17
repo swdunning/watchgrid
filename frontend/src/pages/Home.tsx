@@ -53,6 +53,11 @@ export default function Home() {
 	const [homeRowRetryCounts, setHomeRowRetryCounts] = useState<Record<string, number>>({});
 	const [refreshingHomeRows, setRefreshingHomeRows] = useState<Record<string, boolean>>({});
 
+	const homeDebugEmpty = useMemo(() => {
+		const params = new URLSearchParams(window.location.search);
+		return (params.get("wgDebugEmpty") || "").trim().toUpperCase();
+	}, []);
+
 	const loadHome = async () => {
 		setLoadingHome(true);
 		setErr(null);
@@ -91,10 +96,19 @@ export default function Home() {
 		}
 	};
 
+	const homeDebugSlowRefresh = useMemo(() => {
+		const params = new URLSearchParams(window.location.search);
+		return params.get("wgDebugSlowRefresh") === "1";
+	}, []);
+
 	const refreshHomePopularRow = async (provider: string) => {
 		const p = String(provider).toUpperCase();
 
 		setRefreshingHomeRows((prev) => ({ ...prev, [p]: true }));
+
+		if (homeDebugSlowRefresh) {
+			await new Promise((resolve) => setTimeout(resolve, 1200));
+		}
 
 		try {
 			const data = await api<{
@@ -332,7 +346,14 @@ export default function Home() {
 			const retryCount = homeRowRetryCounts[provider] ?? 0;
 			const refreshing = !!refreshingHomeRows[provider];
 
-			return !hasSaved && !hasPopular && !refreshing && retryCount < HOME_ROW_RETRY_LIMIT;
+			const debugMatch =
+				homeDebugEmpty === "1" ||
+				homeDebugEmpty === "ALL" ||
+				homeDebugEmpty === provider;
+
+			const shouldRefresh = debugMatch || (!hasSaved && !hasPopular);
+
+			return shouldRefresh && !refreshing && retryCount < HOME_ROW_RETRY_LIMIT;
 		});
 
 		if (!candidates.length) return;
@@ -544,7 +565,13 @@ export default function Home() {
 								const hint = hasSaved ? "" : "Click 'Browse' to +Add titles to your list";
 								const logoUrl = meta[pKey]?.logoUrl ?? null;
 
-								const isPopularWarmingUp = !hasSaved && (row.popularItems?.length ?? 0) === 0;
+									const isHomeDebugMatch =
+										homeDebugEmpty === "1" ||
+										homeDebugEmpty === "ALL" ||
+										homeDebugEmpty === String(row.provider).toUpperCase();
+
+									const isPopularWarmingUp =
+										isHomeDebugMatch || (!hasSaved && (row.popularItems?.length ?? 0) === 0);
 
 								return (
 									<div
@@ -575,7 +602,9 @@ export default function Home() {
 
 												<div className="wgEmptyRowState" style={{ marginTop: 2 }}>
 													<div className="wgEmptyRowStateText">
-														Popular titles for {row.label} are loading. You can browse now, or check back in a moment.
+														{refreshingHomeRows[String(row.provider).toUpperCase()]
+															? `Refreshing titles for ${row.label}…`
+															: `Popular titles for ${row.label} are loading. You can browse now, or it will auto reload in a moment.`}
 													</div>
 												</div>
 											</div>
