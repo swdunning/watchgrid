@@ -310,23 +310,31 @@ export default function LandingPage() {
 					  </div>
 				  </div>
           <div className="wgSectionInner">
-            <div className="wgDemoGrid">
-              <DemoShowcase
-                title="All My Lists"
-                subtitle="A mixed feed of saved titles across services"
-                items={demo?.rows?.find((r) => r.key === "all_my_lists")?.items ?? []}
-              />
-              <DemoShowcase
-                title="Popular TV Shows"
-                subtitle="A quick way to find something good tonight"
-                items={demo?.rows?.find((r) => r.key === "popular_tv")?.items ?? []}
-              />
-              <DemoShowcase
-                title="Popular Movies"
-                subtitle="Scroll, save, and open instantly"
-                items={demo?.rows?.find((r) => r.key === "popular_movies")?.items ?? []}
-              />
-            </div>
+					  <div className="wgDemoGrid">
+						  <div className="wgDemoFadeIn wgDemoFadeIn1">
+							  <DemoShowcase
+								  title="All My Lists"
+								  subtitle="A mixed feed of saved titles across services"
+								  items={demo?.rows?.find((r) => r.key === "all_my_lists")?.items ?? []}
+							  />
+						  </div>
+
+						  <div className="wgDemoFadeIn wgDemoFadeIn2">
+							  <DemoShowcase
+								  title="Popular TV Shows"
+								  subtitle="A quick way to find something good tonight"
+								  items={demo?.rows?.find((r) => r.key === "popular_tv")?.items ?? []}
+							  />
+						  </div>
+
+						  <div className="wgDemoFadeIn wgDemoFadeIn3">
+							  <DemoShowcase
+								  title="Popular Movies"
+								  subtitle="Scroll, save, and open instantly"
+								  items={demo?.rows?.find((r) => r.key === "popular_movies")?.items ?? []}
+							  />
+						  </div>
+					  </div>
 
             <div className="wgFooterCta">
               <div>

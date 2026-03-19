@@ -1214,6 +1214,43 @@ p.chip.home {
 	line-height: 1.45;
 }
 
+@keyframes wgDemoFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wgDemoFadeIn {
+  opacity: 0;
+  animation: wgDemoFadeUp 560ms ease-out forwards;
+  will-change: opacity, transform;
+}
+
+.wgDemoFadeIn1 {
+  animation-delay: 80ms;
+}
+
+.wgDemoFadeIn2 {
+  animation-delay: 180ms;
+}
+
+.wgDemoFadeIn3 {
+  animation-delay: 280ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wgDemoFadeIn {
+    opacity: 1;
+    animation: none;
+    transform: none;
+  }
+}
+
 /* demo rails */
 .wgDemoWall {
 	display: grid;
