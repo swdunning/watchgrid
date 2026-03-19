@@ -182,6 +182,11 @@ export default function LandingPage() {
                 I already have an account
               </button>
             </div>
+					  <div className="wgHeroTrust">
+						  <span>✓ Free account</span>
+						  <span>✓ No credit card</span>
+						  <span>✓ Takes 10 seconds</span>
+					  </div>
 
             {/* Mock WatchGrid screen */}
             <div className="wgHeroMock" aria-label="WatchGrid example">
@@ -210,6 +215,50 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
+
+			  {/* BEFORE / AFTER PROBLEM-SOLUTION SECTION */}
+			  <section className="wgSection wgCompareSection">
+				  <div className="wgSectionInner">
+					  <div className="wgCompareHeader">
+						  <div className="wgSectionHeading">Stop juggling streaming apps</div>
+						  <div className="wgSectionSub muted">
+							  WatchGrid turns a scattered watchlist problem into one clean home screen.
+						  </div>
+					  </div>
+
+					  <div className="wgCompareGrid">
+						  <div className="wgCompareCard wgCompareBad">
+							  <div className="wgCompareLabel">Before WatchGrid</div>
+							  <div className="wgCompareTitle">Your watchlists are scattered everywhere</div>
+
+							  <ul className="wgCompareList">
+								  <li>You search the same titles over and over</li>
+								  <li>You forget which service had what</li>
+								  <li>You save things mentally, then lose track</li>
+								  <li>You waste time opening app after app</li>
+							  </ul>
+						  </div>
+
+						  <div className="wgCompareCard wgCompareGood">
+							  <div className="wgCompareLabel">After WatchGrid</div>
+							  <div className="wgCompareTitle">Everything lives in one organized grid</div>
+
+							  <ul className="wgCompareList">
+								  <li>Save titles by streaming service in one place</li>
+								  <li>Browse popular picks and genres faster</li>
+								  <li>Open titles instantly without re-searching</li>
+								  <li>Always know what to watch next</li>
+							  </ul>
+						  </div>
+					  </div>
+
+					  <div className="wgCompareCtaRow">
+						  <button className="btn" onClick={() => nav("/register")}>
+							  Build my WatchGrid →
+						  </button>
+					  </div>
+				  </div>
+			  </section>
 
         {/* LOGO MARQUEE SECTION (big logos, no boxes, collage background) */}
         <section className="wgSection wgLogosSection">
@@ -250,36 +299,16 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* VALUE PROPS (no caching card) */}
-        <section className="wgSection wgFeaturesSection">
-          <div className="wgSectionInner">
-            <div className="wgFeaturesGrid">
-              <div className="wgFeatureCard">
-                <div className="wgFeatureTitle">One home screen</div>
-                <div className="wgFeatureBody">
-                  Your saved titles grouped by service — plus suggestions when your list is empty.
-                </div>
-              </div>
-
-              <div className="wgFeatureCard">
-                <div className="wgFeatureTitle">Browse faster</div>
-                <div className="wgFeatureBody">
-                  Popular, new releases, and genre rows — designed for quick scrolling like a streaming app.
-                </div>
-              </div>
-
-              <div className="wgFeatureCard">
-                <div className="wgFeatureTitle">Open any title instantly</div>
-                <div className="wgFeatureBody">
-                  Tap <b>Open</b> to jump right to the provider. No more re-searching across apps.
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* DEMO RAILS (Popular TV, Popular Movies, All My Lists) using TMDB-backed demo data */}
-        <section className="wgSection wgDemoSection">
+			  {/* DEMO RAILS (Popular TV, Popular Movies, All My Lists) using TMDB-backed demo data */}
+			  <section className="wgSection wgDemoSection">
+				  <div className="wgDemoHeaderSection">
+					  <div className="wgSectionHeading">
+						  See your WatchGrid in action
+					  </div>
+					  <div className="wgSectionSub muted">
+						  Your saved titles, plus popular picks — all in one place.
+					  </div>
+				  </div>
           <div className="wgSectionInner">
             <div className="wgDemoGrid">
               <DemoShowcase
